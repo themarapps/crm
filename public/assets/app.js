@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '' };
+const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '', calendarMonth: '', selectedTaskDate: '' };
 const labels = {
   new: 'جديد', contacted: 'تم التواصل', interested: 'مهتم', not_interested: 'غير مهتم',
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
@@ -388,30 +388,122 @@ function detailField(title, fieldContent) {
 }
 
 function taskCard(task) {
-  return `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${dateLabel(task.due_at)} · ${escapeHtml(task.assignee_name || 'بدون مسؤول')}</small></div>${task.status === 'open' && canEditCustomers() ? `<button class="btn small" data-action="complete-task" data-id="${task.id}">إنهاء</button>` : task.status === 'done' ? badge('done') : ''}</div>`;
+  const customerLabel = task.customer_name ? `${escapeHtml(task.customer_name)} · ` : '';
+  return `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${customerLabel}${dateLabel(task.due_at)} · ${escapeHtml(task.assignee_name || 'بدون مسؤول')}</small></div>${task.status === 'open' && canEditCustomers() ? `<button class="btn small" data-action="complete-task" data-id="${task.id}">إنهاء</button>` : task.status === 'done' ? badge('done') : ''}</div>`;
 }
 
 async function renderTasks() {
-  const params = new URLSearchParams(state.taskFilters);
-  const [response, team] = await Promise.all([request(`/api/tasks?${params}`), request('/api/team')]);
-  state.team = team.data;
+  ensureCalendarDate();
+  const range = calendarRange(state.calendarMonth);
+  const lists = await loadTaskLists(range);
+  state.team = lists.team.data;
+  const groups = taskSections(lists.tasks.data);
+  app.innerHTML = shell(taskPageMarkup(groups, taskCalendarMarkup(lists.calendar.data)), 'tasks', 'المهام');
+  bindShell();
+  bindTaskFilters();
+}
+
+async function loadTaskLists(range) {
+  const listParams = new URLSearchParams(state.taskFilters);
+  const calendarParams = new URLSearchParams(state.taskFilters);
+  calendarParams.set('from', range.from);
+  calendarParams.set('to', range.to);
+  const [tasks, calendar, team] = await Promise.all([
+    request(`/api/tasks?${listParams}`), request(`/api/tasks?${calendarParams}`), request('/api/team'),
+  ]);
+  return { tasks, calendar, team };
+}
+
+function taskSections(tasks) {
   const groups = { overdue: [], today: [], upcoming: [], done: [] };
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
-  response.data.forEach((task) => {
+  const today = riyadhTodayKey();
+  tasks.forEach((task) => {
     if (task.status === 'done') return groups.done.push(task);
-    const due = new Date(task.due_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
+    const due = taskDateKey(task.due_at);
     const key = due < today ? 'overdue' : due === today ? 'today' : 'upcoming';
     groups[key].push(task);
   });
-  const section = (key, title) => `<section class="panel"><div class="panel-head"><h2>${title}</h2><span class="badge">${groups[key].length}</span></div><div class="panel-body">${groups[key].length ? groups[key].map(taskCard).join('') : '<div class="empty">لا توجد مهام هنا.</div>'}</div></section>`;
-  app.innerHTML = shell(`${pageHead('المهام والمتابعات', 'تابع المواعيد المتأخرة والقادمة.', canEditCustomers() ? '<button class="btn primary" data-action="new-task">+ إضافة مهمة</button>' : '')}<section class="panel"><form class="toolbar" id="task-filters"><div class="field"><label for="task-status">حالة المهمة</label><select id="task-status" name="status"><option value="" ${!state.taskFilters.status ? 'selected' : ''}>كل الحالات</option><option value="open" ${state.taskFilters.status === 'open' ? 'selected' : ''}>مفتوحة</option><option value="done" ${state.taskFilters.status === 'done' ? 'selected' : ''}>مكتملة</option></select></div><div class="field"><label for="task-due">موعد المهمة</label><select id="task-due" name="due"><option value="" ${!state.taskFilters.due ? 'selected' : ''}>كل المواعيد</option><option value="today" ${state.taskFilters.due === 'today' ? 'selected' : ''}>اليوم</option><option value="overdue" ${state.taskFilters.due === 'overdue' ? 'selected' : ''}>متأخرة</option><option value="upcoming" ${state.taskFilters.due === 'upcoming' ? 'selected' : ''}>قادمة</option></select></div><button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-task-filters">مسح</button></form></section><div class="task-sections">${section('overdue', 'متأخرة')}${section('today', 'اليوم')}${section('upcoming', 'قادمة')}${section('done', 'مكتملة')}</div>`, 'tasks', 'المهام');
-  bindShell();
+  return groups;
+}
+
+function riyadhTodayKey() {
+  return riyadhDateKey(new Date());
+}
+
+function riyadhDateKey(date) {
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const field = (name) => parts.find((part) => part.type === name).value;
+  return `${field('year')}-${field('month')}-${field('day')}`;
+}
+
+function taskPageMarkup(groups, calendarMarkup) {
+  const createButton = canEditCustomers() ? '<button class="btn primary" data-action="new-task">+ إضافة مهمة</button>' : '';
+  return `${pageHead('المهام والمتابعات', 'تابع المواعيد المتأخرة والقادمة حسب اليوم.', createButton)}${taskFiltersMarkup()}${calendarMarkup}${taskSectionsMarkup(groups)}`;
+}
+
+function taskFiltersMarkup() {
+  return `<section class="panel"><form class="toolbar" id="task-filters"><div class="field"><label for="task-status">حالة المهمة</label><select id="task-status" name="status"><option value="" ${!state.taskFilters.status ? 'selected' : ''}>كل الحالات</option><option value="open" ${state.taskFilters.status === 'open' ? 'selected' : ''}>مفتوحة</option><option value="done" ${state.taskFilters.status === 'done' ? 'selected' : ''}>مكتملة</option></select></div><div class="field"><label for="task-due">موعد المهمة</label><select id="task-due" name="due"><option value="" ${!state.taskFilters.due ? 'selected' : ''}>كل المواعيد</option><option value="today" ${state.taskFilters.due === 'today' ? 'selected' : ''}>اليوم</option><option value="overdue" ${state.taskFilters.due === 'overdue' ? 'selected' : ''}>متأخرة</option><option value="upcoming" ${state.taskFilters.due === 'upcoming' ? 'selected' : ''}>قادمة</option></select></div><button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-task-filters">مسح</button></form></section>`;
+}
+
+function taskSectionsMarkup(groups) {
+  return `<div class="task-sections">${taskSectionMarkup(groups.overdue, 'متأخرة')}${taskSectionMarkup(groups.today, 'اليوم')}${taskSectionMarkup(groups.upcoming, 'قادمة')}${taskSectionMarkup(groups.done, 'مكتملة')}</div>`;
+}
+
+function taskSectionMarkup(tasks, title) {
+  const taskRows = tasks.map(taskCard).join('') || '<div class="empty">لا توجد مهام هنا.</div>';
+  return `<section class="panel"><div class="panel-head"><h2>${title}</h2><span class="badge">${tasks.length}</span></div><div class="panel-body">${taskRows}</div></section>`;
+}
+
+function bindTaskFilters() {
   document.querySelector('#task-filters').addEventListener('submit', (event) => {
     event.preventDefault();
     state.taskFilters = Object.fromEntries(new FormData(event.currentTarget));
     if (state.taskFilters.status === 'done') state.taskFilters.due = '';
     render();
   });
+}
+
+function ensureCalendarDate() {
+  if (state.calendarMonth) return;
+  const [year, month, day] = riyadhDateKey(new Date()).split('-');
+  state.calendarMonth = `${year}-${month}`;
+  state.selectedTaskDate = `${year}-${month}-${day}`;
+}
+
+function calendarRange(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const firstDay = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const gridStart = new Date(Date.UTC(year, monthNumber - 1, 1 - firstDay.getUTCDay()));
+  const gridEnd = new Date(gridStart.getTime() + 41 * 86400000);
+  return { from: gridStart.toISOString().slice(0, 10), to: gridEnd.toISOString().slice(0, 10) };
+}
+
+function taskDateKey(dueAt) {
+  return riyadhDateKey(new Date(dueAt.replace(' ', 'T') + 'Z'));
+}
+
+function taskCalendarMarkup(tasks) {
+  const [year, month] = state.calendarMonth.split('-').map(Number);
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const gridStart = new Date(Date.UTC(year, month - 1, 1 - firstDay.getUTCDay()));
+  const grouped = tasks.reduce((byDay, task) => {
+    const day = taskDateKey(task.due_at);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(task);
+    return byDay;
+  }, {});
+  const days = Array.from({ length: 42 }, (_, index) => calendarDayMarkup(gridStart, index, month, grouped));
+  const dailyTasks = (grouped[state.selectedTaskDate] || []).map(taskCard).join('') || '<div class="empty">لا توجد مهام في هذا اليوم.</div>';
+  const monthName = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
+  return `<section class="panel task-calendar"><div class="panel-head"><h2>تقويم المهام</h2><div class="calendar-nav"><button class="btn small" data-action="calendar-previous" aria-label="الشهر السابق">‹</button><strong>${monthName}</strong><button class="btn small" data-action="calendar-next" aria-label="الشهر التالي">›</button></div></div><div class="panel-body"><div class="calendar-grid calendar-weekdays">${['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${days.join('')}</div><div class="calendar-day-tasks"><h3>مهام ${escapeHtml(state.selectedTaskDate)}</h3>${dailyTasks}</div></div></section>`;
+}
+
+function calendarDayMarkup(gridStart, index, month, tasksByDay) {
+  const date = new Date(gridStart.getTime() + index * 86400000);
+  const dateKey = date.toISOString().slice(0, 10);
+  const taskCount = (tasksByDay[dateKey] || []).length;
+  const classes = ['calendar-day', dateKey.slice(5, 7) === String(month).padStart(2, '0') ? '' : 'outside-month', dateKey === state.selectedTaskDate ? 'selected' : ''].filter(Boolean).join(' ');
+  return `<button class="${classes}" type="button" data-action="select-calendar-day" data-day="${dateKey}" aria-pressed="${dateKey === state.selectedTaskDate}"><span>${date.getUTCDate()}</span>${taskCount ? `<small>${taskCount} ${taskCount === 1 ? 'مهمة' : 'مهام'}</small>` : '<small class="calendar-empty">—</small>'}</button>`;
 }
 
 function renderImport() {
@@ -503,10 +595,21 @@ async function runAction(button) {
     if (button.dataset.action === 'edit-member') return memberDialog(state.team.find((member) => String(member.id) === button.dataset.id));
     if (button.dataset.action === 'clear-filters') { state.filters = {}; state.selectedView = ''; state.selectedCustomers.clear(); state.page = 1; return render(); }
     if (button.dataset.action === 'clear-task-filters') { state.taskFilters = {}; return render(); }
+    if (button.dataset.action === 'calendar-previous') return moveCalendarMonth(-1);
+    if (button.dataset.action === 'calendar-next') return moveCalendarMonth(1);
+    if (button.dataset.action === 'select-calendar-day') { state.selectedTaskDate = button.dataset.day; return render(); }
     if (button.dataset.action === 'previous') { state.page = Math.max(1, state.page - 1); return render(); }
     if (button.dataset.action === 'next') { state.page++; return render(); }
     if (button.dataset.action === 'complete-task') return completeTask(button.dataset.id);
   } catch (error) { showError(error); }
+}
+
+function moveCalendarMonth(monthOffset) {
+  const [year, month] = state.calendarMonth.split('-').map(Number);
+  const firstDay = new Date(Date.UTC(year, month - 1 + monthOffset, 1));
+  state.calendarMonth = `${firstDay.getUTCFullYear()}-${String(firstDay.getUTCMonth() + 1).padStart(2, '0')}`;
+  state.selectedTaskDate = `${state.calendarMonth}-01`;
+  render();
 }
 
 function saveCurrentView() {

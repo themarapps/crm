@@ -629,6 +629,50 @@ tbody tr:hover {
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px
 }
+.task-calendar { margin-bottom:14px }
+.calendar-nav {
+  display:flex;
+  align-items:center;
+  gap:10px
+}
+.calendar-grid {
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:6px
+}
+.calendar-weekdays {
+  margin-bottom:6px;
+  color:var(--muted);
+  text-align:center;
+  font-size:12px
+}
+.calendar-day {
+  display:flex;
+  min-width:0;
+  min-height:68px;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:space-between;
+  border:1px solid var(--line);
+  border-radius:7px;
+  padding:8px;
+  background:#fff;
+  color:#0f172a;
+  text-align:right
+}
+.calendar-day small {
+  color:var(--primary);
+  font-size:11px
+}
+.calendar-day .calendar-empty { color:#cbd5e1 }
+.calendar-day.outside-month { background:#f8fafc;color:#94a3b8 }
+.calendar-day.selected { border-color:var(--primary);background:#f6eef7;box-shadow:inset 0 0 0 1px var(--primary) }
+.calendar-day-tasks {
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid var(--line)
+}
+.calendar-day-tasks h3 { margin:0 0 8px;font-size:14px }
 .mobile-only {
   display:none
 }
@@ -786,6 +830,10 @@ td::before {
 .task-sections {
   grid-template-columns:1fr
 }
+.calendar-grid { gap:3px }
+.calendar-weekdays { font-size:10px }
+.calendar-day { min-height:48px;padding:5px;border-radius:5px;font-size:12px }
+.calendar-day small { font-size:9px }
 .mobile-only {
   display:flex
 }

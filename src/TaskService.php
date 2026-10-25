@@ -16,7 +16,8 @@ final class TaskService
                 $filters['params'][] = (int) $user['id'];
             }
         }
-        $sql = self::listSql($filters['conditions']);
+        $limit = isset($requestQuery['from']) || isset($requestQuery['to']) ? 1000 : 500;
+        $sql = self::listSql($filters['conditions'], $limit);
         $taskQuery = $db->prepare($sql);
         $taskQuery->execute($filters['params']);
         Http::json(['data' => $taskQuery->fetchAll()]);
@@ -26,8 +27,9 @@ final class TaskService
     {
         [$statusCondition, $statusParams] = self::statusFilter($requestQuery);
         [$dueCondition, $dueParams] = self::dueFilter($requestQuery);
-        $conditions = array_filter([$statusCondition, $dueCondition]);
-        return ['conditions' => $conditions, 'params' => array_merge($statusParams, $dueParams)];
+        [$rangeCondition, $rangeParams] = self::dateRangeFilter($requestQuery);
+        $conditions = array_filter([$statusCondition, $dueCondition, $rangeCondition]);
+        return ['conditions' => $conditions, 'params' => array_merge($statusParams, $dueParams, $rangeParams)];
     }
 
     private static function statusFilter(array $requestQuery): array
@@ -55,10 +57,42 @@ final class TaskService
         return ['t.due_at BETWEEN ? AND ? AND t.status = ?', [$start, $end, 'open']];
     }
 
-    private static function listSql(array $conditions): string
+    private static function dateRangeFilter(array $requestQuery): array
+    {
+        $from = $requestQuery['from'] ?? null;
+        $to = $requestQuery['to'] ?? null;
+        if ($from === null && $to === null) return [null, []];
+        if (!is_string($from) || !is_string($to)) {
+            Http::json(['error' => 'validation_error', 'fields' => ['date_range' => 'أرسل تاريخ بداية ونهاية صالحين.']], 422);
+        }
+        return ['t.due_at >= ? AND t.due_at < ?', self::validatedDateRange($from, $to)];
+    }
+
+    private static function validatedDateRange(string $from, string $to): array
+    {
+        if (!self::isCalendarDate($from) || !self::isCalendarDate($to)) {
+            Http::json(['error' => 'validation_error', 'fields' => ['date_range' => 'أرسل تاريخ بداية ونهاية صالحين.']], 422);
+        }
+        $riyadh = new DateTimeZone('Asia/Riyadh');
+        $utc = new DateTimeZone('UTC');
+        $start = new DateTimeImmutable($from . ' 00:00:00', $riyadh);
+        $end = new DateTimeImmutable($to . ' 00:00:00', $riyadh);
+        if ($start > $end || $start->diff($end)->days > 41) {
+            Http::json(['error' => 'validation_error', 'fields' => ['date_range' => 'نطاق التاريخ يجب ألا يتجاوز 42 يومًا.']], 422);
+        }
+        return [$start->setTimezone($utc)->format('Y-m-d H:i:s'), $end->modify('+1 day')->setTimezone($utc)->format('Y-m-d H:i:s')];
+    }
+
+    private static function isCalendarDate(string $date): bool
+    {
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $parts)) return false;
+        return checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1]);
+    }
+
+    private static function listSql(array $conditions, int $limit): string
     {
         $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
-        return 'SELECT t.*, c.name AS customer_name, c.email AS customer_email, creator.name AS creator_name, assignee.name AS assignee_name FROM follow_up_tasks t JOIN customers c ON c.id = t.customer_id JOIN users creator ON creator.id = t.created_by LEFT JOIN users assignee ON assignee.id = t.assignee_id' . $where . " ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END, t.due_at ASC, t.id DESC LIMIT 500";
+        return 'SELECT t.*, c.name AS customer_name, c.email AS customer_email, creator.name AS creator_name, assignee.name AS assignee_name FROM follow_up_tasks t JOIN customers c ON c.id = t.customer_id JOIN users creator ON creator.id = t.created_by LEFT JOIN users assignee ON assignee.id = t.assignee_id' . $where . " ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END, t.due_at ASC, t.id DESC LIMIT " . $limit;
     }
 
     public static function save(PDO $db, array $requestFields, array $user, ?int $taskId = null): never
