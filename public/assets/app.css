@@ -1263,12 +1263,14 @@ td::before {
   .saved-view-actions { grid-column:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px }
   .saved-view-actions [data-action="save-view"] { grid-column:1 / -1 }
   .saved-view-actions .btn { min-width:0;padding-inline:7px;font-size:11px }
-  .customer-filters { gap:15px;padding:16px 14px }
-  .filter-heading { align-items:flex-start }
+  .customer-filters { gap:13px;padding:14px 12px }
+  .filter-heading { align-items:flex-start;flex-direction:column;gap:8px }
   .filter-heading h2 { font-size:15px }
   .filter-heading p { font-size:11px }
-  .customer-filter-groups { grid-template-columns:minmax(0,1fr);gap:11px }
-  .customer-filter-fields { grid-template-columns:minmax(0,1fr);gap:11px }
+  .filter-count { align-self:flex-start }
+  .customer-filter-groups { grid-template-columns:minmax(0,1fr);gap:10px }
+  .customer-filter-group { padding:12px }
+  .customer-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr));gap:10px }
   .customer-filter-fields .field label,.filter-sort-fields .field label { font-size:11px }
   .customer-filter-fields .field input,.customer-filter-fields .field select,.filter-sort-fields .field select { min-height:42px;font-size:12px }
   .filter-footer { gap:14px;padding-top:14px }
@@ -1503,7 +1505,8 @@ td::before {
   .dashboard-stats { gap:7px }
   .dashboard-stat { padding:11px }
   .dashboard-stat .stat-number { font-size:24px }
-  .customer-filters { padding-inline:11px }
+  .customer-filters { padding-inline:10px }
+  .customer-filter-fields { grid-template-columns:minmax(0,1fr) }
   .task-calendar .panel-body { padding:10px }
   .calendar-grid { gap:3px }
   .calendar-day { min-height:56px;padding:5px }
