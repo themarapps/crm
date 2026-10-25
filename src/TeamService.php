@@ -3,9 +3,10 @@ declare(strict_types=1);
 
 final class TeamService
 {
-    public static function list(PDO $db): never
+    public static function list(PDO $db, array $user): never
     {
-        $members = $db->query('SELECT id, name, email, role, is_active, created_at FROM users ORDER BY name')->fetchAll();
+        $columns = $user['role'] === 'admin' ? 'id, name, email, role, is_active, created_at' : 'id, name, role, is_active';
+        $members = $db->query('SELECT ' . $columns . ' FROM users ORDER BY name')->fetchAll();
         Http::json(['data' => $members]);
     }
 

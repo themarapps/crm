@@ -123,7 +123,7 @@ try {
         TaskService::save($db, Http::body(), $user, (int) $matches[1]);
     }
     if ($path === '/api/team' && $method === 'GET') {
-        TeamService::list($db);
+        TeamService::list($db, $user);
     }
     if ($path === '/api/team' && $method === 'POST') {
         Auth::requireAdmin($user);
