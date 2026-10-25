@@ -1403,3 +1403,73 @@ td::before {
   .team-count { text-align:right }
   .team-count strong { font-size:16px }
 }
+
+@media(min-width:640px) and (max-width:767px) {
+  body { padding-bottom:calc(68px + env(safe-area-inset-bottom)) }
+  .sidebar { display:none }
+  .main { margin:0 }
+  .topbar { min-height:60px;padding:0 14px;gap:10px }
+  .global-search { min-width:0;flex:1 1 auto }
+  .global-search input { height:40px;font-size:12px }
+  .top-actions { gap:5px }
+  .desktop-action { width:40px;padding:0 }
+  .quick-create-label { display:none }
+  .content { padding:16px 14px calc(86px + env(safe-area-inset-bottom)) }
+  .mobile-nav {
+    position:fixed;
+    z-index:50;
+    inset-inline:0;
+    bottom:0;
+    height:calc(68px + env(safe-area-inset-bottom));
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    overflow-x:auto;
+    padding:0 6px env(safe-area-inset-bottom);
+    border-top:1px solid var(--line);
+    background:#fff;
+    scrollbar-width:none
+  }
+  .mobile-nav::-webkit-scrollbar { display:none }
+  .mobile-nav a {
+    display:grid;
+    flex:1 0 60px;
+    justify-items:center;
+    gap:3px;
+    min-height:50px;
+    padding:6px 3px;
+    border-radius:10px;
+    color:#64748b;
+    text-decoration:none;
+    text-align:center;
+    font-size:10px
+  }
+  .mobile-nav a.active { background:#eee7fa;color:var(--plum);font-weight:700 }
+  .mobile-nav .nav-icon { width:18px;height:18px;font-size:17px }
+  .dashboard-side { grid-template-columns:1fr }
+  .customer-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  .report-groups,.task-sections { grid-template-columns:1fr }
+  .task-sections { gap:12px }
+  .task-filter-form { grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:15px }
+  .task-filter-heading { align-items:flex-start }
+  .task-filter-actions { grid-column:1/-1;justify-content:flex-start }
+  .task-calendar .panel-body { padding:15px }
+  .calendar-day { min-height:68px;padding:7px }
+  .integration-panel .panel-body,.import-panel .panel-body { padding:18px }
+  .table-wrap { max-width:100%;overscroll-behavior-inline:contain }
+}
+
+@media(max-width:380px) {
+  .topbar { padding-inline:9px;gap:5px }
+  .top-actions { gap:2px }
+  .top-actions .icon-button { width:34px;height:36px }
+  .top-avatar { width:30px;height:30px }
+  .global-search input { padding-inline:32px 8px;font-size:10px }
+  .dashboard-stats { gap:7px }
+  .dashboard-stat { padding:11px }
+  .dashboard-stat .stat-number { font-size:24px }
+  .customer-filters { padding-inline:11px }
+  .task-calendar .panel-body { padding:10px }
+  .calendar-grid { gap:3px }
+  .calendar-day { min-height:56px;padding:5px }
+}
