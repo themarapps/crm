@@ -57,8 +57,8 @@ final class TeamService
     private static function requiredNewPassword(array $requestFields): string
     {
         $password = $requestFields['password'] ?? '';
-        if (!is_string($password) || strlen($password) < 14) {
-            Http::json(['error' => 'validation_error', 'fields' => ['password' => 'كلمة المرور يجب أن تكون 14 حرفًا على الأقل.']], 422);
+        if (!is_string($password) || strlen($password) < 8) {
+            Http::json(['error' => 'validation_error', 'fields' => ['password' => 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.']], 422);
         }
         return $password;
     }
@@ -66,8 +66,8 @@ final class TeamService
     private static function optionalPasswordUpdate(array $requestFields): string
     {
         $password = $requestFields['password'] ?? '';
-        if (!is_string($password) || ($password !== '' && strlen($password) < 14)) {
-            Http::json(['error' => 'validation_error', 'fields' => ['password' => 'كلمة المرور يجب أن تكون 14 حرفًا على الأقل.']], 422);
+        if (!is_string($password) || ($password !== '' && strlen($password) < 8)) {
+            Http::json(['error' => 'validation_error', 'fields' => ['password' => 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.']], 422);
         }
         return $password;
     }

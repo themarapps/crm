@@ -122,8 +122,8 @@ final class Schema
         if ($email === '' || $password === '') {
             throw new RuntimeException('Set APP_ADMIN_EMAIL and APP_ADMIN_PASSWORD before initializing the CRM database.');
         }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 14) {
-            throw new RuntimeException('Initial admin credentials are invalid; use a valid email and a 14+ character password.');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
+            throw new RuntimeException('Initial admin credentials are invalid; use a valid email and an 8+ character password.');
         }
 
         $now = gmdate('Y-m-d H:i:s');
