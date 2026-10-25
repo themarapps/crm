@@ -42,25 +42,30 @@ token returned by `GET /api/csrf` in the `X-CSRF-Token` header.
 - `POST /api/auth/login` — `{ "email": "...", "password": "..." }`
 - `POST /api/auth/logout`
 - `GET /api/me`
-- `GET /api/dashboard` — counts and upcoming/overdue follow-ups scoped to the signed-in member
-- `GET /api/reports/summary` — customer totals grouped by stage, subscription status, and plan (manager/admin)
+- `GET /api/dashboard` — counts, upcoming/overdue follow-ups, and customers with no recorded activity for 14 days, scoped to customer visibility
+- `GET /api/reports/summary` — customer totals grouped by stage, subscription status, and plan, plus team performance (manager/admin)
 - `GET|PUT /api/settings/source` — administrator-only external source connection settings; credentials are encrypted at rest
 - `POST /api/settings/source/sync` — administrator-only customer sync from the configured source, matched by normalized email
 - `GET|POST /api/customers`
+- `POST /api/customers/bulk` — atomically updates stage and/or assignment for up to 100 accessible customers (edit access required; assignment requires view-all)
 - `GET /api/customers/export.csv` — exports matching filters (manager/admin; maximum 10,000 rows)
 - `GET /api/customers/options` — distinct filter options from saved customers
 - `GET|PUT /api/customers/{id}`
 - `GET|POST /api/customers/{id}/notes`
 - `GET|POST /api/tasks`, `PUT /api/tasks/{id}`
 - `GET|POST /api/team`, `PUT /api/team/{id}` (team changes require an administrator)
+- `GET /api/audit` — latest team and customer-permission changes (administrator)
 - `POST /api/import/csv/preview` — checks rows and estimates inserts, updates, and skips without writing
 - `POST /api/import/csv` — imports the reviewed file
+- `POST /api/leads/inbound` — server-to-server lead intake, authenticated with `Authorization: Bearer <token>`
 
 Customer create and update use JSON field names matching the CSV columns in
 snake_case, plus `crm_stage` (`new`, `contacted`, `interested`,
-`not_interested`) and `assigned_to`. `PUT /api/customers/{id}` is a full update:
+`not_interested`) and `assigned_to`. Optional CRM metadata includes `lead_source`,
+`campaign`, and `tags` (an array of up to 20 tag names). Omitting optional metadata
+from an update preserves its current value. `PUT /api/customers/{id}` is a full update:
 send the fields the form intends to keep. `GET /api/customers/{id}` returns
-`customer`, `notes`, and `tasks`. Notes use `{ "body": "..." }`. Tasks use
+`customer`, `notes`, `tasks`, `tags`, and `activity`. Notes use `{ "body": "..." }`. Tasks use
 `customer_id`, `title`, `due_at` (ISO 8601), optional `assignee_id`, `details`,
 and `status` (`open` or `done`).
 
@@ -70,14 +75,19 @@ Supported customer fields are `external_id`, `name`, `email`, `phone`,
 `currency`, `source_stage`, `services`, `service_count`, `last_activity_at`,
 `error_count`, `crm_stage`, and `assigned_to`. Customer list responses use
 `{ "data": [...], "page": 1, "per_page": 25, "total": 3 }`. Dashboard counts
-and upcoming tasks are returned by `/api/dashboard`.
+and upcoming tasks are returned by `/api/dashboard`. `/api/customers/options`
+also returns lead sources, campaigns, and tags visible to the signed-in member.
 
-Customer list filters: `q`, `subscription_status`, `plan`, `stage`, `assigned_to`,
-`page`, `per_page`. Task list filters: `status`, `due` (`today`, `overdue`, `upcoming`).
+Customer list filters: `q`, `subscription_status`, `payment_status`, `plan`, `stage`, `assigned_to`, `lead_source`, `campaign`, `tag`,
+`sort` (`name`, `phone`, `plan`, `subscription_status`, `crm_stage`, `assigned_to`, `registered_at`, `updated_at`), `direction` (`asc`, `desc`), `page`, `per_page`. Users can save named filter views in this browser; views are stored locally per signed-in user and do not sync across devices. Bulk updates accept `{ "ids": [1, 2], "crm_stage": "contacted", "assigned_to": 4 }`; either update field may be omitted, and use `null` for an unassigned owner. Task list filters: `status`, `due` (`today`, `overdue`, `upcoming`).
+Dashboard inactivity reminders use the last recorded customer activity, then registration/creation time when no activity exists. Team performance counts customers and overdue tasks by assigned owner. Its conversion rate is the share of that owner's customers currently in `contacted` or `interested` stage; it is a current-stage share, not a historical cohort conversion rate.
 Roles are `admin` (full access and team management), `manager` (all customer, task,
 report, import, and export access), and `member` (customers assigned to them and
-their related follow-ups). Customer notes, edits, tasks, and CSV imports are recorded
-in the customer activity history.
+their related follow-ups). Administrators can override each non-admin member's
+customer visibility (all customers or assigned customers) and editing access. The edit
+permission also controls customer notes and follow-up task changes. Customer notes,
+edits, tag changes, tasks, and CSV imports are recorded in customer activity history;
+team account and permission changes are recorded in the administrator audit log.
 
 The external source settings page stores the source base URL and encrypted login
 credentials. The 32-byte key at `storage/integration-encryption.key` must be provisioned
@@ -85,11 +95,26 @@ outside Git as a root-owned `0640` file with the CRM PHP-FPM group, and backed u
 separately from the database dump. The administrator can trigger a paginated source sync
 from this page. Existing customers are matched by normalized email and only changed
 imported fields are written; unchanged rows are not updated or logged. CRM stages,
-assignments, notes, and follow-up tasks remain. `bin/sync-source.php` runs the same
+assignments, notes, tags, lead attribution, and follow-up tasks remain. `bin/sync-source.php` runs the same
 sync in scheduled jobs using the database environment, and reports counts only. The
 10-minute cron template is `deploy/crm-source-sync.cron`; its root-owned wrapper reads
 the PHP-FPM pool settings, then runs the sync process as `www-data`. Runs are logged with
 the `crm-source-sync` syslog tag using counts only.
+
+Website forms and server-side integrations can post canonical JSON to
+`/api/leads/inbound`. Configure `CRM_LEAD_WEBHOOK_TOKEN` in the PHP-FPM/server
+environment as a random URL-safe value of at least 32 characters; do not place it
+in browser JavaScript or commit it to Git. The endpoint accepts `name`, `email`,
+optional `phone`, `lead_source`, and `campaign`. It normalizes email and updates a
+matching customer's name and supplied phone while preserving CRM stage, owner,
+tags, notes, and tasks. New leads start in `new`; their source defaults to
+`website_form`. The endpoint supports server-to-server submissions and does not
+configure direct connections to any specific form or messaging provider.
+
+After installing a CRM update that adds schema objects, run `php bin/setup.php`
+once against the configured database before serving requests. It creates the
+additive tag, attribution, permission, and audit tables; normal API requests do not
+run schema setup.
 
 CSV rows are matched by normalized email. The interface previews a file before
 the user confirms the import. Arabic headers from the supplied export

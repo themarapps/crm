@@ -1,5 +1,5 @@
 const app = document.querySelector('#app');
-const state = { user: null, csrf: '', team: [], filters: {}, page: 1, currentCustomer: null, pendingImportFile: null };
+const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '' };
 const labels = {
   new: 'جديد', contacted: 'تم التواصل', interested: 'مهتم', not_interested: 'غير مهتم',
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
@@ -28,6 +28,23 @@ function icon(name) {
 
 function routePath() {
   return location.hash.replace(/^#\/?/, '') || 'dashboard';
+}
+
+function canEditCustomers() {
+  return Number(state.user?.can_edit_customers ?? 1) === 1;
+}
+
+function canViewAllCustomers() {
+  return Number(state.user?.can_view_all_customers ?? (state.user?.role === 'admin' || state.user?.role === 'manager' ? 1 : 0)) === 1;
+}
+
+function savedViews() {
+  try { return JSON.parse(localStorage.getItem(`crm-customer-views-${state.user?.id}`) || '[]'); }
+  catch { return []; }
+}
+
+function storeSavedViews(views) {
+  localStorage.setItem(`crm-customer-views-${state.user?.id}`, JSON.stringify(views));
 }
 
 function escapeHtml(input) {
@@ -92,6 +109,7 @@ async function submitLogin(event) {
     const session = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(formFields) });
     state.user = session.user;
     state.csrf = session.csrf_token;
+    state.selectedCustomers.clear();
     location.hash = '#/dashboard';
     render();
   } catch (error) { showError(error); submitButton.disabled = false; }
@@ -102,7 +120,7 @@ function shell(content, activeKey, title) {
   const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
   const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
   return `<div class="shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">CRM</span><span class="brand-text">إدارة العملاء</span></div><nav class="nav">${navigation}</nav><div class="side-bottom"><button class="side-action" data-action="logout">${icon('logout')}<span class="side-label">تسجيل الخروج</span></button><div class="user-mini"><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div></div></div></aside>
-  <section class="main"><header class="topbar"><div class="top-title">${title}</div><div class="top-actions"><button class="btn primary desktop-action" data-action="new-customer">+ عميل جديد</button><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span></div></header><main class="content">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
+  <section class="main"><header class="topbar"><div class="top-title">${title}</div><div class="top-actions">${canEditCustomers() ? '<button class="btn primary desktop-action" data-action="new-customer">+ عميل جديد</button>' : ''}<span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span></div></header><main class="content">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
 }
 
 function pageHead(title, description, action = '') {
@@ -149,10 +167,11 @@ async function renderDashboard() {
   const counts = dashboard.counts;
   const overdueRows = dashboard.overdue_tasks.length ? dashboard.overdue_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div><a class="btn small" href="#/customers/${task.customer_id}">فتح العميل</a></div>`).join('') : '';
   const taskRows = dashboard.upcoming_tasks.length ? dashboard.upcoming_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><div class="person"><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div></div><a class="btn small" href="#/customers/${task.customer_id}">العميل</a></div>`).join('') : '<div class="empty">لا توجد متابعات قادمة.</div>';
+  const inactiveRows = dashboard.inactive_customers.length ? dashboard.inactive_customers.map((customer) => `<div class="task-row"><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(labels[customer.crm_stage] || customer.crm_stage)} · آخر تواصل مسجل ${dateLabel(customer.last_contact_at)}</small></div><a class="btn small" href="#/customers/${customer.id}">فتح العميل</a></div>`).join('') : '<div class="empty">لا يوجد عملاء تجاوزوا 14 يومًا بلا تواصل مسجل.</div>';
   const customerRows = customers.data.length ? customers.data.map(customerRow).join('') : '<div class="empty">أضف أول عميل لبدء المتابعة.</div>';
   app.innerHTML = shell(`${pageHead('الرئيسية', 'ملخص سريع للعملاء والمهام اليومية.')}${overdueRows ? `<section class="panel overdue-panel"><div class="panel-head"><h2>متابعات تحتاج إجراء</h2><span class="badge danger">${counts.overdue_tasks} متأخرة</span></div><div class="panel-body">${overdueRows}</div></section>` : ''}
     <div class="stats">${statCard('إجمالي العملاء', counts.customers)}${statCard('اشتراكات نشطة', counts.active_subscriptions)}${statCard('عملاء جدد', counts.new_customers)}${statCard('متابعات متأخرة', counts.overdue_tasks, counts.today_tasks ? `${counts.today_tasks} متابعة اليوم` : '')}</div>
-    <div class="grid-two"><section class="panel"><div class="panel-head"><h2>المتابعات القادمة</h2><a class="btn small" href="#/tasks">كل المهام</a></div><div class="panel-body">${taskRows}</div></section><section class="panel"><div class="panel-head"><h2>أحدث العملاء</h2><a class="btn small" href="#/customers">عرض الكل</a></div><div class="panel-body">${customerRows}</div></section></div>`, 'dashboard', 'نظرة عامة');
+    <div class="grid-two"><section class="panel"><div class="panel-head"><h2>المتابعات القادمة</h2><a class="btn small" href="#/tasks">كل المهام</a></div><div class="panel-body">${taskRows}</div></section><section class="panel"><div class="panel-head"><h2>أحدث العملاء</h2><a class="btn small" href="#/customers">عرض الكل</a></div><div class="panel-body">${customerRows}</div></section></div><section class="panel"><div class="panel-head"><h2>عملاء بلا تواصل مسجل منذ 14 يومًا</h2><a class="btn small" href="#/customers">كل العملاء</a></div><div class="panel-body">${inactiveRows}</div></section>`, 'dashboard', 'نظرة عامة');
   bindShell();
 }
 
@@ -163,7 +182,8 @@ function customerRow(customer) {
 async function renderReports() {
   const report = await request('/api/reports/summary');
   const reportGroup = (title, rows) => `<section class="panel"><div class="panel-head"><h2>${title}</h2></div><div class="panel-body report-list">${rows.length ? rows.map((row) => `<div class="report-row"><span>${escapeHtml(labels[row.label] || row.label || 'غير محدد')}</span><strong>${escapeHtml(row.total)}</strong></div>`).join('') : '<div class="empty">لا توجد بيانات بعد.</div>'}</div></section>`;
-  app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div>`, 'reports', 'التقارير');
+  const performanceRows = report.team_performance.length ? report.team_performance.map((row) => `<tr><td>${escapeHtml(row.owner_name)}</td><td>${escapeHtml(row.customers)}</td><td>${escapeHtml(row.overdue_tasks)}</td><td>${escapeHtml(row.advanced_customers)} (${escapeHtml(row.conversion_rate)}%)</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty">لا توجد بيانات أداء بعد.</div></td></tr>';
+  app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div><section class="panel"><div class="panel-head"><h2>أداء الفريق</h2><span class="muted">التحويل = العملاء في مرحلتي تم التواصل أو مهتم ÷ إجمالي العملاء</span></div><div class="table-wrap"><table><thead><tr><th>المسؤول</th><th>العملاء</th><th>المتابعات المتأخرة</th><th>التحويل إلى تم التواصل أو مهتم</th></tr></thead><tbody>${performanceRows}</tbody></table></div></section>`, 'reports', 'التقارير');
   bindShell();
 }
 
@@ -231,36 +251,121 @@ async function syncSourceCustomers(event) {
 }
 
 async function renderCustomers() {
-  const params = new URLSearchParams({ page: String(state.page), per_page: '25' });
-  Object.entries(state.filters).forEach(([key, value]) => value && params.set(key, value));
-  const [response, options, team] = await Promise.all([request(`/api/customers?${params}`), request('/api/customers/options'), request('/api/team')]);
-  state.team = team.data;
-  const rows = response.data.length ? response.data.map((customer) => `<tr><td data-label="العميل"><a class="table-person" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></span></a></td><td data-label="الهاتف">${escapeHtml(customer.phone || '—')}</td><td data-label="الباقة">${escapeHtml(customer.plan || '—')}</td><td data-label="الاشتراك">${badge(customer.subscription_status)}</td><td data-label="مرحلة المتابعة">${badge(customer.crm_stage)}</td><td data-label="المسؤول">${escapeHtml(team.data.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}</td><td data-label="التسجيل">${dateLabel(customer.registered_at)}</td></tr>`).join('') : '<tr><td colspan="7"><div class="empty">لا توجد نتائج مطابقة. جرّب تغيير الفلاتر.</div></td></tr>';
-  const planOptions = options.plans.map((plan) => `<option value="${escapeHtml(plan)}" ${state.filters.plan === plan ? 'selected' : ''}>${escapeHtml(plan)}</option>`).join('');
-  const statusOptions = options.subscription_statuses.map((status) => `<option value="${escapeHtml(status)}" ${state.filters.subscription_status === status ? 'selected' : ''}>${escapeHtml(labels[status] || status)}</option>`).join('');
-  const stageOptions = options.stages.map((stage) => `<option value="${escapeHtml(stage)}" ${state.filters.stage === stage ? 'selected' : ''}>${escapeHtml(labels[stage] || stage)}</option>`).join('');
-  const assigneeOptions = team.data.map((member) => `<option value="${member.id}" ${state.filters.assigned_to === String(member.id) ? 'selected' : ''}>${escapeHtml(member.name)}</option>`).join('');
-  const exportLink = ['admin', 'manager'].includes(state.user.role) ? `<a class="btn" href="/api/customers/export.csv?${params.toString()}">تصدير CSV</a>` : '';
-  app.innerHTML = shell(`${pageHead('العملاء', `إجمالي ${response.total} عميل`, `${exportLink}<button class="btn primary" data-action="new-customer">+ إضافة عميل</button>`)}
-    <section class="panel"><form class="toolbar" id="filters"><div class="field search-field"><label for="filter-q">بحث</label><input class="search" id="filter-q" name="q" value="${escapeHtml(state.filters.q || '')}" placeholder="الاسم أو البريد أو الهاتف"></div><div class="field"><label>الاشتراك</label><select name="subscription_status"><option value="">كل الحالات</option>${statusOptions}</select></div><div class="field"><label>الباقة</label><select name="plan"><option value="">كل الباقات</option>${planOptions}</select></div><div class="field"><label>مرحلة المتابعة</label><select name="stage"><option value="">كل المراحل</option>${stageOptions}</select></div><div class="field"><label>المسؤول</label><select name="assigned_to"><option value="">كل الفريق</option>${assigneeOptions}</select></div><button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-filters">مسح</button></form>
-    <div class="table-wrap"><table><thead><tr><th>العميل</th><th>الهاتف</th><th>الباقة</th><th>الاشتراك</th><th>مرحلة المتابعة</th><th>المسؤول</th><th>تاريخ التسجيل</th></tr></thead><tbody>${rows}</tbody></table></div><div class="pagination"><span>صفحة ${response.page} · ${response.total} عميل</span><span><button class="btn small" data-action="previous" ${state.page <= 1 ? 'disabled' : ''}>السابق</button> <button class="btn small" data-action="next" ${state.page * response.per_page >= response.total ? 'disabled' : ''}>التالي</button></span></div></section>`, 'customers', 'العملاء');
+  const list = await loadCustomerList();
+  state.team = list.team.data;
+  app.innerHTML = shell(customerListMarkup(list), 'customers', 'العملاء');
   bindShell();
-  document.querySelector('#filters').addEventListener('submit', (event) => { event.preventDefault(); state.filters = Object.fromEntries(new FormData(event.currentTarget)); state.page = 1; render(); });
+  bindCustomerList(list);
+}
+
+async function loadCustomerList() {
+  const params = new URLSearchParams({ page: String(state.page), per_page: '25', ...state.filters });
+  const [response, options, team] = await Promise.all([
+    request(`/api/customers?${params}`), request('/api/customers/options'), request('/api/team'),
+  ]);
+  return { response, options, team, params };
+}
+
+function customerListMarkup(list) {
+  const views = savedViews();
+  const viewOptions = views.map((view) => `<option value="${escapeHtml(view.name)}" ${state.selectedView === view.name ? 'selected' : ''}>${escapeHtml(view.name)}</option>`).join('');
+  const exportLink = ['admin', 'manager'].includes(state.user.role) ? `<a class="btn" href="/api/customers/export.csv?${list.params}">تصدير CSV</a>` : '';
+  const createButton = canEditCustomers() ? '<button class="btn primary" data-action="new-customer">+ إضافة عميل</button>' : '';
+  return `${pageHead('العملاء', `إجمالي ${list.response.total} عميل`, `${exportLink}${createButton}`)}
+    <section class="panel"><div class="toolbar saved-view-bar"><div class="field"><label for="saved-view">العروض المحفوظة على هذا الجهاز</label><select id="saved-view"><option value="">اختر عرضًا</option>${viewOptions}</select></div><button class="btn" type="button" data-action="save-view">حفظ العرض الحالي</button><button class="btn" type="button" data-action="rename-view" ${!state.selectedView ? 'disabled' : ''}>إعادة تسمية</button><button class="btn" type="button" data-action="delete-view" ${!state.selectedView ? 'disabled' : ''}>حذف</button></div>
+    ${customerFiltersMarkup(list.options, list.team.data)}${bulkToolbarMarkup(list.team.data)}${customerTableMarkup(list.response, list.team.data)}</section>`;
+}
+
+function customerFiltersMarkup(options, members) {
+  const planOptions = options.plans.map((plan) => `<option value="${escapeHtml(plan)}" ${state.filters.plan === plan ? 'selected' : ''}>${escapeHtml(plan)}</option>`).join('');
+  const subscriptionOptions = options.subscription_statuses.map((status) => `<option value="${escapeHtml(status)}" ${state.filters.subscription_status === status ? 'selected' : ''}>${escapeHtml(labels[status] || status)}</option>`).join('');
+  const paymentOptions = options.payment_statuses.map((status) => `<option value="${escapeHtml(status)}" ${state.filters.payment_status === status ? 'selected' : ''}>${escapeHtml(labels[status] || status)}</option>`).join('');
+  const stageOptions = options.stages.map((stage) => `<option value="${escapeHtml(stage)}" ${state.filters.stage === stage ? 'selected' : ''}>${escapeHtml(labels[stage] || stage)}</option>`).join('');
+  const memberOptions = members.map((member) => `<option value="${member.id}" ${state.filters.assigned_to === String(member.id) ? 'selected' : ''}>${escapeHtml(member.name)}</option>`).join('');
+  const sourceOptions = options.lead_sources.map((source) => `<option value="${escapeHtml(source)}" ${state.filters.lead_source === source ? 'selected' : ''}>${escapeHtml(source)}</option>`).join('');
+  const campaignOptions = options.campaigns.map((campaign) => `<option value="${escapeHtml(campaign)}" ${state.filters.campaign === campaign ? 'selected' : ''}>${escapeHtml(campaign)}</option>`).join('');
+  const tagOptions = options.tags.map((tag) => `<option value="${tag.id}" ${state.filters.tag === String(tag.id) ? 'selected' : ''}>${escapeHtml(tag.name)}</option>`).join('');
+  return `<form class="toolbar" id="filters"><div class="field search-field"><label for="filter-q">بحث</label><input class="search" id="filter-q" name="q" value="${escapeHtml(state.filters.q || '')}" placeholder="الاسم أو البريد أو الهاتف"></div>
+    <div class="field"><label>الاشتراك</label><select name="subscription_status"><option value="">كل الحالات</option>${subscriptionOptions}</select></div><div class="field"><label>حالة الدفع</label><select name="payment_status"><option value="">كل حالات الدفع</option>${paymentOptions}</select></div><div class="field"><label>الباقة</label><select name="plan"><option value="">كل الباقات</option>${planOptions}</select></div><div class="field"><label>مرحلة المتابعة</label><select name="stage"><option value="">كل المراحل</option>${stageOptions}</select></div><div class="field"><label>المسؤول</label><select name="assigned_to"><option value="">كل الفريق</option>${memberOptions}</select></div><div class="field"><label>مصدر العميل</label><select name="lead_source"><option value="">كل المصادر</option>${sourceOptions}</select></div><div class="field"><label>الحملة</label><select name="campaign"><option value="">كل الحملات</option>${campaignOptions}</select></div><div class="field"><label>الوسم</label><select name="tag"><option value="">كل الوسوم</option>${tagOptions}</select></div>
+    ${customerSortingMarkup()}<button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-filters">مسح</button></form>`;
+}
+
+function customerSortingMarkup() {
+  const fields = { name: 'الاسم', plan: 'الباقة', subscription_status: 'الاشتراك', crm_stage: 'المرحلة', assigned_to: 'المسؤول', registered_at: 'تاريخ التسجيل', updated_at: 'آخر تحديث' };
+  const options = Object.entries(fields).map(([key, label]) => `<option value="${key}" ${(state.filters.sort || 'updated_at') === key ? 'selected' : ''}>${label}</option>`).join('');
+  return `<div class="field"><label>الترتيب حسب</label><select name="sort">${options}</select></div><div class="field"><label>الاتجاه</label><select name="direction"><option value="desc" ${(state.filters.direction || 'desc') === 'desc' ? 'selected' : ''}>تنازلي</option><option value="asc" ${state.filters.direction === 'asc' ? 'selected' : ''}>تصاعدي</option></select></div>`;
+}
+
+function bulkToolbarMarkup(members) {
+  if (!canEditCustomers()) return '';
+  const memberOptions = members.filter((member) => member.is_active).map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
+  const assignmentField = canViewAllCustomers() ? `<div class="field"><label for="bulk-assignee">المسؤول الجديد</label><select id="bulk-assignee"><option value="">بدون تغيير</option><option value="none">غير معين</option>${memberOptions}</select></div>` : '';
+  const stageOptions = ['new', 'contacted', 'interested', 'not_interested'].map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
+  return `<div class="toolbar bulk-toolbar"><label><input id="select-visible-customers" type="checkbox"> تحديد الصفحة</label><span>${state.selectedCustomers.size} محدد</span><div class="field"><label for="bulk-stage">المرحلة الجديدة</label><select id="bulk-stage"><option value="">بدون تغيير</option>${stageOptions}</select></div>${assignmentField}<button class="btn primary" type="button" data-action="bulk-update" ${state.selectedCustomers.size ? '' : 'disabled'}>تطبيق على المحدد</button></div>`;
+}
+
+function customerTableMarkup(response, members) {
+  const headers = { name: 'العميل', phone: 'الهاتف', plan: 'الباقة', subscription_status: 'الاشتراك', crm_stage: 'مرحلة المتابعة', assigned_to: 'المسؤول', registered_at: 'تاريخ التسجيل' };
+  const sortableHeaders = Object.entries(headers).map(([key, label]) => `<th><button class="table-sort" type="button" data-sort="${key}">${label}${state.filters.sort === key ? (state.filters.direction === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`).join('');
+  const rows = response.data.length ? response.data.map((customer) => customerRowMarkup(customer, members)).join('') : '<tr><td colspan="8"><div class="empty">لا توجد نتائج مطابقة. جرّب تغيير الفلاتر.</div></td></tr>';
+  return `<div class="table-wrap"><table><thead><tr><th>تحديد</th>${sortableHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="pagination"><span>صفحة ${response.page} · ${response.total} عميل</span><span><button class="btn small" data-action="previous" ${state.page <= 1 ? 'disabled' : ''}>السابق</button> <button class="btn small" data-action="next" ${state.page * response.per_page >= response.total ? 'disabled' : ''}>التالي</button></span></div>`;
+}
+
+function customerRowMarkup(customer, members) {
+  const owner = members.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين';
+  const checked = state.selectedCustomers.has(Number(customer.id)) ? 'checked' : '';
+  return `<tr><td data-label="تحديد"><input type="checkbox" class="customer-select" value="${customer.id}" ${checked} aria-label="تحديد ${escapeHtml(customer.name)}"></td><td data-label="العميل"><a class="table-person" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></span></a></td><td data-label="الهاتف">${escapeHtml(customer.phone || '—')}</td><td data-label="الباقة">${escapeHtml(customer.plan || '—')}</td><td data-label="الاشتراك">${badge(customer.subscription_status)}</td><td data-label="مرحلة المتابعة">${badge(customer.crm_stage)}</td><td data-label="المسؤول">${escapeHtml(owner)}</td><td data-label="التسجيل">${dateLabel(customer.registered_at)}</td></tr>`;
+}
+
+function bindCustomerList(list) {
+  const views = savedViews();
+  document.querySelector('#filters').addEventListener('submit', (event) => {
+    event.preventDefault(); state.filters = Object.fromEntries(new FormData(event.currentTarget));
+    state.selectedView = ''; state.selectedCustomers.clear(); state.page = 1; render();
+  });
+  document.querySelector('#saved-view').addEventListener('change', (event) => applySavedView(event.currentTarget.value, views));
+  document.querySelectorAll('[data-sort]').forEach((button) => button.addEventListener('click', () => sortCustomers(button.dataset.sort)));
+  document.querySelectorAll('.customer-select').forEach((input) => input.addEventListener('change', () => toggleCustomerSelection(input)));
+  document.querySelector('#select-visible-customers')?.addEventListener('change', (event) => togglePageSelection(list.response.data, event.currentTarget.checked));
+}
+
+function applySavedView(name, views) {
+  state.selectedView = name;
+  const view = views.find((savedView) => savedView.name === name);
+  if (!view) return;
+  state.filters = { ...view.filters }; state.selectedCustomers.clear(); state.page = 1; render();
+}
+
+function sortCustomers(sort) {
+  state.filters.direction = state.filters.sort === sort && state.filters.direction !== 'asc' ? 'asc' : 'desc';
+  state.filters.sort = sort; state.page = 1; render();
+}
+
+function toggleCustomerSelection(input) {
+  const customerId = Number(input.value);
+  if (input.checked) state.selectedCustomers.add(customerId); else state.selectedCustomers.delete(customerId);
+  render();
+}
+
+function togglePageSelection(customers, selected) {
+  customers.forEach((customer) => selected ? state.selectedCustomers.add(Number(customer.id)) : state.selectedCustomers.delete(Number(customer.id)));
+  render();
 }
 
 async function renderCustomer(customerId) {
   const response = await request(`/api/customers/${customerId}`);
   state.team = (await request('/api/team')).data;
   const customer = response.customer;
+  customer.tags = response.tags || [];
   state.currentCustomer = customer;
   const notes = response.notes.length ? response.notes.map((note) => `<div class="task-row"><div><strong>${escapeHtml(note.author)}</strong><p>${escapeHtml(note.body)}</p><small class="muted">${dateLabel(note.created_at)}</small></div></div>`).join('') : '<div class="empty">لا توجد ملاحظات بعد.</div>';
   const tasks = response.tasks.length ? response.tasks.map(taskCard).join('') : '<div class="empty">لا توجد مهام للعميل.</div>';
   const activity = response.activity.length ? response.activity.map((entry) => `<div class="task-row"><div><strong>${escapeHtml(entry.summary)}</strong><small>${escapeHtml(entry.actor_name || 'النظام')} · ${dateLabel(entry.created_at)}</small></div></div>`).join('') : '<div class="empty">سيظهر هنا سجل تحديثات العميل ومتابعاته.</div>';
-  app.innerHTML = shell(`${pageHead('ملف العميل', `تمت الإضافة ${dateLabel(customer.registered_at)}`, `<button class="btn" data-action="edit-customer">تعديل البيانات</button>`)}
-    <section class="panel"><div class="detail-hero"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><h2>${escapeHtml(customer.name)}</h2><p>${escapeHtml(customer.email)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p></div></div>${badge(customer.subscription_status)}</div><div class="panel-body detail-grid">${detailField('الباقة', customer.plan)}${detailField('دورة الفوترة', customer.billing_cycle)}${detailField('حالة الدفع', customer.payment_status)}${detailField('مرحلة المتابعة', labels[customer.crm_stage] || customer.crm_stage)}${detailField('المسؤول', state.team.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}${detailField('الشركة', customer.company_url)}${detailField('الخدمات', customer.services)}${detailField('تاريخ التسجيل', dateLabel(customer.registered_at))}</div></section>
-    <div class="content-grid"><div><section class="panel"><div class="panel-head"><h2>الملاحظات</h2></div><div class="panel-body"><form id="note-form"><div class="field"><label for="note-body">ملاحظة جديدة</label><textarea id="note-body" name="body" required maxlength="10000" placeholder="اكتب ملخص المكالمة أو أي معلومة مهمة"></textarea></div><button class="btn primary" style="margin-top:10px" type="submit">حفظ الملاحظة</button><div data-error></div></form>${notes}</div></section></div><div><section class="panel"><div class="panel-head"><h2>المهام</h2><button class="btn small" data-action="new-task">+ مهمة</button></div><div class="panel-body">${tasks}</div></section></div></div><section class="panel activity-panel"><div class="panel-head"><h2>سجل نشاط العميل</h2></div><div class="panel-body">${activity}</div></section>`, 'customers', 'ملف العميل');
+  app.innerHTML = shell(`${pageHead('ملف العميل', `تمت الإضافة ${dateLabel(customer.registered_at)}`, canEditCustomers() ? '<button class="btn" data-action="edit-customer">تعديل البيانات</button>' : '')}
+    <section class="panel"><div class="detail-hero"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><h2>${escapeHtml(customer.name)}</h2><p>${escapeHtml(customer.email)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p></div></div>${badge(customer.subscription_status)}</div><div class="panel-body detail-grid">${detailField('الباقة', customer.plan)}${detailField('دورة الفوترة', customer.billing_cycle)}${detailField('حالة الدفع', customer.payment_status)}${detailField('مرحلة المتابعة', labels[customer.crm_stage] || customer.crm_stage)}${detailField('المسؤول', state.team.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}${detailField('مصدر العميل', customer.lead_source)}${detailField('الحملة', customer.campaign)}${detailField('الشركة', customer.company_url)}${detailField('الخدمات', customer.services)}${detailField('تاريخ التسجيل', dateLabel(customer.registered_at))}<div class="detail-field"><small>وسوم العميل</small><div class="tag-list">${(response.tags || []).length ? response.tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div></div></section>
+    <div class="content-grid"><div><section class="panel"><div class="panel-head"><h2>الملاحظات</h2></div><div class="panel-body">${canEditCustomers() ? `<form id="note-form"><div class="field"><label for="note-body">ملاحظة جديدة</label><textarea id="note-body" name="body" required maxlength="10000" placeholder="اكتب ملخص المكالمة أو أي معلومة مهمة"></textarea></div><button class="btn primary" style="margin-top:10px" type="submit">حفظ الملاحظة</button><div data-error></div></form>` : ''}${notes}</div></section></div><div><section class="panel"><div class="panel-head"><h2>المهام</h2>${canEditCustomers() ? '<button class="btn small" data-action="new-task">+ مهمة</button>' : ''}</div><div class="panel-body">${tasks}</div></section></div></div><section class="panel activity-panel"><div class="panel-head"><h2>سجل نشاط العميل</h2></div><div class="panel-body">${activity}</div></section>`, 'customers', 'ملف العميل');
   bindShell();
-  document.querySelector('#note-form').addEventListener('submit', async (event) => {
+  document.querySelector('#note-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     try { await request(`/api/customers/${customerId}/notes`, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); await renderCustomer(customerId); }
     catch (error) { showError(error); }
@@ -272,11 +377,12 @@ function detailField(title, fieldContent) {
 }
 
 function taskCard(task) {
-  return `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${dateLabel(task.due_at)} · ${escapeHtml(task.assignee_name || 'بدون مسؤول')}</small></div>${task.status === 'open' ? `<button class="btn small" data-action="complete-task" data-id="${task.id}">إنهاء</button>` : badge('done')}</div>`;
+  return `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${dateLabel(task.due_at)} · ${escapeHtml(task.assignee_name || 'بدون مسؤول')}</small></div>${task.status === 'open' && canEditCustomers() ? `<button class="btn small" data-action="complete-task" data-id="${task.id}">إنهاء</button>` : task.status === 'done' ? badge('done') : ''}</div>`;
 }
 
 async function renderTasks() {
-  const [response, team] = await Promise.all([request('/api/tasks'), request('/api/team')]);
+  const params = new URLSearchParams(state.taskFilters);
+  const [response, team] = await Promise.all([request(`/api/tasks?${params}`), request('/api/team')]);
   state.team = team.data;
   const groups = { overdue: [], today: [], upcoming: [], done: [] };
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' });
@@ -287,8 +393,14 @@ async function renderTasks() {
     groups[key].push(task);
   });
   const section = (key, title) => `<section class="panel"><div class="panel-head"><h2>${title}</h2><span class="badge">${groups[key].length}</span></div><div class="panel-body">${groups[key].length ? groups[key].map(taskCard).join('') : '<div class="empty">لا توجد مهام هنا.</div>'}</div></section>`;
-  app.innerHTML = shell(`${pageHead('المهام والمتابعات', 'تابع المواعيد المتأخرة والقادمة.', '<button class="btn primary" data-action="new-task">+ إضافة مهمة</button>')}<div class="task-sections">${section('overdue', 'متأخرة')}${section('today', 'اليوم')}${section('upcoming', 'قادمة')}${section('done', 'مكتملة')}</div>`, 'tasks', 'المهام');
+  app.innerHTML = shell(`${pageHead('المهام والمتابعات', 'تابع المواعيد المتأخرة والقادمة.', canEditCustomers() ? '<button class="btn primary" data-action="new-task">+ إضافة مهمة</button>' : '')}<section class="panel"><form class="toolbar" id="task-filters"><div class="field"><label for="task-status">حالة المهمة</label><select id="task-status" name="status"><option value="" ${!state.taskFilters.status ? 'selected' : ''}>كل الحالات</option><option value="open" ${state.taskFilters.status === 'open' ? 'selected' : ''}>مفتوحة</option><option value="done" ${state.taskFilters.status === 'done' ? 'selected' : ''}>مكتملة</option></select></div><div class="field"><label for="task-due">موعد المهمة</label><select id="task-due" name="due"><option value="" ${!state.taskFilters.due ? 'selected' : ''}>كل المواعيد</option><option value="today" ${state.taskFilters.due === 'today' ? 'selected' : ''}>اليوم</option><option value="overdue" ${state.taskFilters.due === 'overdue' ? 'selected' : ''}>متأخرة</option><option value="upcoming" ${state.taskFilters.due === 'upcoming' ? 'selected' : ''}>قادمة</option></select></div><button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-task-filters">مسح</button></form></section><div class="task-sections">${section('overdue', 'متأخرة')}${section('today', 'اليوم')}${section('upcoming', 'قادمة')}${section('done', 'مكتملة')}</div>`, 'tasks', 'المهام');
   bindShell();
+  document.querySelector('#task-filters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    state.taskFilters = Object.fromEntries(new FormData(event.currentTarget));
+    if (state.taskFilters.status === 'done') state.taskFilters.due = '';
+    render();
+  });
 }
 
 function renderImport() {
@@ -351,11 +463,12 @@ function importReportMarkup(report) {
 }
 
 async function renderTeam() {
-  const response = await request('/api/team');
+  const [response, auditResponse] = await Promise.all([request('/api/team'), request('/api/audit')]);
   state.team = response.data;
   const canManage = state.user.role === 'admin';
   const rows = response.data.map((member) => `<tr><td data-label="عضو الفريق"><div class="table-person"><span class="avatar">${escapeHtml(member.name.slice(0, 1))}</span><strong>${escapeHtml(member.name)}</strong></div></td><td data-label="البريد">${escapeHtml(member.email)}</td><td data-label="الصلاحية">${badge(member.role)}</td><td data-label="الحالة">${member.is_active ? badge('active') : badge('expired')}</td><td data-label="إجراء">${canManage ? `<button class="btn small" data-action="edit-member" data-id="${member.id}">تعديل</button>` : '—'}</td></tr>`).join('');
-  app.innerHTML = shell(`${pageHead('الفريق', 'أعضاء الفريق المسؤولون عن متابعة العملاء.', canManage ? '<button class="btn primary" data-action="new-member">+ إضافة عضو</button>' : '')}<section class="panel"><div class="table-wrap"><table><thead><tr><th>عضو الفريق</th><th>البريد</th><th>الصلاحية</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${rows || '<tr><td colspan="5"><div class="empty">لا يوجد أعضاء.</div></td></tr>'}</tbody></table></div></section>`, 'team', 'إدارة الفريق');
+  const auditRows = auditResponse.data.map((entry) => `<div class="task-row"><div><strong>${escapeHtml(entry.summary)}</strong><small>${escapeHtml(entry.actor_name)} · ${escapeHtml(entry.target_name || 'عضو فريق')} · ${dateLabel(entry.created_at)}</small></div></div>`).join('');
+  app.innerHTML = shell(`${pageHead('الفريق', 'أعضاء الفريق المسؤولون عن متابعة العملاء.', canManage ? '<button class="btn primary" data-action="new-member">+ إضافة عضو</button>' : '')}<section class="panel"><div class="table-wrap"><table><thead><tr><th>عضو الفريق</th><th>البريد</th><th>الصلاحية</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${rows || '<tr><td colspan="5"><div class="empty">لا يوجد أعضاء.</div></td></tr>'}</tbody></table></div></section><section class="panel activity-panel"><div class="panel-head"><h2>سجل تغييرات الفريق والصلاحيات</h2></div><div class="panel-body">${auditRows || '<div class="empty">لا توجد تغييرات مسجلة.</div>'}</div></section>`, 'team', 'إدارة الفريق');
   bindShell();
 }
 
@@ -365,19 +478,72 @@ function bindShell() {
 
 async function runAction(button) {
   try {
+    if (button.dataset.action === 'save-view') return saveCurrentView();
+    if (button.dataset.action === 'rename-view') return renameCurrentView();
+    if (button.dataset.action === 'delete-view') return deleteCurrentView();
+    if (button.dataset.action === 'bulk-update') return bulkUpdateCustomers();
     if (button.dataset.action === 'logout') {
-      await request('/api/auth/logout', { method: 'POST', body: '{}' }); state.user = null; state.csrf = ''; return render();
+      await request('/api/auth/logout', { method: 'POST', body: '{}' }); state.user = null; state.csrf = ''; state.selectedCustomers.clear(); return render();
     }
     if (button.dataset.action === 'new-customer') return customerDialog();
     if (button.dataset.action === 'edit-customer') return customerDialog(state.currentCustomer);
     if (button.dataset.action === 'new-task') return taskDialog();
     if (button.dataset.action === 'new-member') return memberDialog();
     if (button.dataset.action === 'edit-member') return memberDialog(state.team.find((member) => String(member.id) === button.dataset.id));
-    if (button.dataset.action === 'clear-filters') { state.filters = {}; state.page = 1; return render(); }
+    if (button.dataset.action === 'clear-filters') { state.filters = {}; state.selectedView = ''; state.selectedCustomers.clear(); state.page = 1; return render(); }
+    if (button.dataset.action === 'clear-task-filters') { state.taskFilters = {}; return render(); }
     if (button.dataset.action === 'previous') { state.page = Math.max(1, state.page - 1); return render(); }
     if (button.dataset.action === 'next') { state.page++; return render(); }
     if (button.dataset.action === 'complete-task') return completeTask(button.dataset.id);
   } catch (error) { showError(error); }
+}
+
+function saveCurrentView() {
+  const name = window.prompt('اسم العرض المحفوظ');
+  if (!name || !name.trim()) return;
+  const views = savedViews();
+  const viewName = name.trim().slice(0, 60);
+  const existing = views.findIndex((view) => view.name === viewName);
+  const view = { name: viewName, filters: { ...state.filters } };
+  if (existing >= 0) views[existing] = view; else views.push(view);
+  storeSavedViews(views);
+  state.selectedView = viewName;
+  render();
+}
+
+function renameCurrentView() {
+  const views = savedViews();
+  const selected = views.find((view) => view.name === state.selectedView);
+  if (!selected) return;
+  const name = window.prompt('الاسم الجديد للعرض', selected.name);
+  if (!name || !name.trim()) return;
+  const nextName = name.trim().slice(0, 60);
+  if (views.some((view) => view.name === nextName && view !== selected)) return window.alert('يوجد عرض محفوظ بهذا الاسم.');
+  selected.name = nextName;
+  storeSavedViews(views);
+  state.selectedView = nextName;
+  render();
+}
+
+function deleteCurrentView() {
+  if (!state.selectedView || !window.confirm('حذف العرض المحفوظ؟')) return;
+  storeSavedViews(savedViews().filter((view) => view.name !== state.selectedView));
+  state.selectedView = '';
+  render();
+}
+
+async function bulkUpdateCustomers() {
+  const stage = document.querySelector('#bulk-stage')?.value || '';
+  const assigneeControl = document.querySelector('#bulk-assignee');
+  const assignee = assigneeControl?.value || '';
+  if (!state.selectedCustomers.size || (!stage && !assignee)) return showError(new Error('حدد عملاء واختر مرحلة أو مسؤولًا.'));
+  const payload = { ids: [...state.selectedCustomers] };
+  if (stage) payload.crm_stage = stage;
+  if (assignee) payload.assigned_to = assignee === 'none' ? null : Number(assignee);
+  const result = await request('/api/customers/bulk', { method: 'POST', body: JSON.stringify(payload) });
+  state.selectedCustomers.clear();
+  window.alert(`تم تطبيق التغيير على ${result.updated} عميل.`);
+  render();
 }
 
 function openDialog(title, content) {
@@ -394,21 +560,24 @@ function selectOptions(options, selected, getOptionLabel = (option) => option.na
   return options.map((option) => `<option value="${escapeHtml(getOptionValue(option))}" ${String(getOptionValue(option)) === String(selected ?? '') ? 'selected' : ''}>${escapeHtml(getOptionLabel(option))}</option>`).join('');
 }
 
-function customerFields(customer = {}) {
+function customerFields(customer = {}, tagOptions = []) {
   const field = (name, label, type = 'text') => `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${escapeHtml(customer[name] ?? '')}" ${name === 'name' || name === 'email' ? 'required' : ''}></div>`;
   return `<div class="form-grid">${field('name', 'اسم العميل')}${field('email', 'البريد الإلكتروني', 'email')}${field('phone', 'رقم الهاتف', 'tel')}${field('company_url', 'رابط الشركة', 'url')}${field('plan', 'الباقة')}${field('subscription_status', 'حالة الاشتراك')}${field('billing_cycle', 'دورة الفوترة')}${field('payment_status', 'حالة الدفع')}
     <div class="field"><label for="f-crm_stage">مرحلة المتابعة</label><select id="f-crm_stage" name="crm_stage">${selectOptions(['new', 'contacted', 'interested', 'not_interested'].map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new')}</select></div>
-    <div class="field"><label for="f-assigned_to">المسؤول</label><select id="f-assigned_to" name="assigned_to"><option value="">غير معين</option>${selectOptions(state.team.filter((member) => member.is_active), customer.assigned_to)}</select></div>${field('registered_at', 'تاريخ التسجيل', 'date')}${field('last_amount', 'آخر مبلغ', 'number')}</div><div data-error></div><div class="form-actions"><button class="btn primary" type="submit">حفظ العميل</button><button class="btn" type="button" data-cancel>إلغاء</button></div>`;
+    <div class="field"><label for="f-assigned_to">المسؤول</label><select id="f-assigned_to" name="assigned_to"><option value="">غير معين</option>${selectOptions(state.team.filter((member) => member.is_active), customer.assigned_to)}</select></div>${field('lead_source', 'مصدر العميل')}${field('campaign', 'الحملة')}${field('registered_at', 'تاريخ التسجيل', 'date')}${field('last_amount', 'آخر مبلغ', 'number')}<div class="field full"><label for="f-tags_text">الوسوم</label><input id="f-tags_text" name="tags_text" list="tag-suggestions" value="${escapeHtml((customer.tags || []).map((tag) => tag.name).join(', '))}" placeholder="مثال: أولوية عالية، حملة الصيف"><datalist id="tag-suggestions">${tagOptions.map((tag) => `<option value="${escapeHtml(tag.name)}"></option>`).join('')}</datalist><small class="muted">افصل بين الوسوم بفاصلة. حتى 20 وسمًا، بحد أقصى 40 حرفًا لكل وسم.</small></div></div><div data-error></div><div class="form-actions"><button class="btn primary" type="submit">حفظ العميل</button><button class="btn" type="button" data-cancel>إلغاء</button></div>`;
 }
 
 async function customerDialog(customer = null) {
   if (!state.team.length) state.team = (await request('/api/team')).data;
-  const dialog = openDialog(customer ? 'تعديل بيانات العميل' : 'إضافة عميل', `<form id="customer-form">${customerFields(customer || {})}</form>`);
+  const options = await request('/api/customers/options');
+  const dialog = openDialog(customer ? 'تعديل بيانات العميل' : 'إضافة عميل', `<form id="customer-form">${customerFields(customer || {}, options.tags)}</form>`);
   dialog.querySelector('[data-cancel]').addEventListener('click', () => dialog.close());
   dialog.querySelector('#customer-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    const fields = Object.fromEntries(new FormData(event.currentTarget));
-    if (customer) Object.assign(fields, customer, Object.fromEntries(new FormData(event.currentTarget)));
+    const formFields = Object.fromEntries(new FormData(event.currentTarget));
+    const fields = customer ? { ...customer, ...formFields } : formFields;
+    fields.tags = (formFields.tags_text || '').split(/[,،\n]/).map((tag) => tag.trim()).filter(Boolean);
+    delete fields.tags_text;
     fields.assigned_to = fields.assigned_to || null;
     try {
       const response = await request(customer ? `/api/customers/${customer.id}` : '/api/customers', { method: customer ? 'PUT' : 'POST', body: JSON.stringify(fields) });
@@ -450,18 +619,28 @@ function memberDialog(member = null) {
   ];
   const roleOptions = roles.map(([value, label]) => `<option value="${value}" ${member?.role === value || (!member && value === 'member') ? 'selected' : ''}>${label}</option>`).join('');
   const roleHelp = '<small class="muted">عضو الفريق يتابع العملاء المسندة إليه. المدير يدير العملاء والمهام والتقارير والاستيراد والتصدير. المسؤول يدير المستخدمين وكل العملاء.</small>';
+  const viewAll = member ? Number(member.can_view_all_customers) === 1 : false;
+  const editCustomers = member ? Number(member.can_edit_customers) === 1 : true;
   const dialog = openDialog(member ? 'تعديل عضو الفريق' : 'إضافة عضو للفريق', `
     <form id="member-form"><div class="form-grid">
       <div class="field"><label>الاسم</label><input name="name" value="${escapeHtml(member?.name || '')}" required maxlength="120"></div>
       <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" value="${escapeHtml(member?.email || '')}" required></div>
       <div class="field"><label>كلمة المرور ${member ? '(اختياري)' : ''}</label><input name="password" type="password" minlength="8" ${member ? '' : 'required'}><small class="muted">8 أحرف على الأقل</small></div>
-      <div class="field"><label>الصلاحية</label><select name="role">${roleOptions}</select>${roleHelp}</div>
+      <div class="field"><label>الصلاحية</label><select name="role" id="member-role">${roleOptions}</select>${roleHelp}</div>
       ${member ? `<div class="field"><label>الحالة</label><select name="is_active"><option value="1" ${member.is_active ? 'selected' : ''}>نشط</option><option value="0" ${!member.is_active ? 'selected' : ''}>موقوف</option></select></div>` : ''}
+      <div class="field full"><label>صلاحيات العملاء</label><label class="permission-choice"><input class="permission-check" type="checkbox" name="can_view_all_customers" ${viewAll ? 'checked' : ''}> عرض كل العملاء</label><label class="permission-choice"><input class="permission-check" type="checkbox" name="can_edit_customers" ${editCustomers ? 'checked' : ''}> تعديل بيانات العملاء وإضافة المتابعات والملاحظات</label></div>
     </div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ</button></div></form>`);
-  dialog.querySelector('#member-form').addEventListener('submit', async (event) => {
+  const memberForm = dialog.querySelector('#member-form');
+  if (!member) memberForm.querySelector('#member-role').addEventListener('change', (event) => {
+    memberForm.elements.can_view_all_customers.checked = ['admin', 'manager'].includes(event.currentTarget.value);
+    memberForm.elements.can_edit_customers.checked = true;
+  });
+  memberForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const fields = Object.fromEntries(new FormData(event.currentTarget));
     fields.is_active = fields.is_active !== '0';
+    fields.can_view_all_customers = event.currentTarget.elements.can_view_all_customers.checked;
+    fields.can_edit_customers = event.currentTarget.elements.can_edit_customers.checked;
     try { await request(member ? `/api/team/${member.id}` : '/api/team', { method: member ? 'PUT' : 'POST', body: JSON.stringify(fields) }); dialog.close(); await renderTeam(); }
     catch (error) { showError(error); }
   });
