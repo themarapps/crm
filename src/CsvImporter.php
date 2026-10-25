@@ -184,15 +184,16 @@ final class CsvImporter
         return substr($phone, 1);
     }
 
-    private static function importRows(PDO $db, array $csvRows, int $actorId, bool $skipUnchanged = false): array
+    private static function importRows(PDO $db, array $csvRows, int $actorId, bool $sourceSync = false): array
     {
         $emailCounts = self::emailCounts($csvRows);
         $importReport = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
-        if ($skipUnchanged) $importReport['unchanged'] = 0;
+        if ($sourceSync) $importReport['unchanged'] = 0;
+        $context = ['actor_id' => $actorId, 'source_sync' => $sourceSync];
         $db->beginTransaction();
         try {
             foreach ($csvRows as $csvRow) {
-                $rowOutcome = self::importRow($db, $csvRow, $emailCounts, $actorId, $skipUnchanged);
+                $rowOutcome = self::importRow($db, $csvRow, $emailCounts, $context);
                 $importReport = self::recordOutcome($importReport, $rowOutcome);
             }
             $db->commit();
@@ -240,19 +241,29 @@ final class CsvImporter
         return $counts;
     }
 
-    private static function importRow(PDO $db, array $csvRow, array $emailCounts, int $actorId, bool $skipUnchanged): array
+    private static function importRow(PDO $db, array $csvRow, array $emailCounts, array $context): array
     {
-        $outcome = self::classifyRow($db, $csvRow, $emailCounts, $skipUnchanged);
+        $sourceSync = $context['source_sync'];
+        $outcome = self::classifyRow($db, $csvRow, $emailCounts, $sourceSync);
         if ($outcome['status'] === 'skipped') {
             return $outcome;
         }
         $customerFields = self::customerFields($csvRow);
-        if ($skipUnchanged && $outcome['status'] === 'updated' && !self::hasImportedChanges($outcome['existing_customer'], $customerFields)) {
+        if ($sourceSync && $outcome['status'] === 'updated' && !self::hasImportedChanges($outcome['existing_customer'], $customerFields)) {
             return array_merge($outcome, ['status' => 'unchanged']);
         }
         $customerId = self::persistImportedCustomer($db, $customerFields, $outcome['customer_id']);
-        ActivityLog::record($db, $customerId, $actorId, $outcome['status'] === 'created' ? 'created' : 'imported', $outcome['status'] === 'created' ? 'تمت إضافة العميل عبر الاستيراد.' : 'تم تحديث بيانات العميل عبر الاستيراد.');
+        $eventType = $outcome['status'] === 'created' ? 'created' : 'imported';
+        ActivityLog::record($db, $customerId, $context['actor_id'], $eventType, self::activitySummary($outcome['status'], $sourceSync));
         return $outcome;
+    }
+
+    private static function activitySummary(string $status, bool $sourceSync): string
+    {
+        $created = $status === 'created';
+        $action = $created ? 'إضافة العميل' : 'تحديث بيانات العميل';
+        $channel = $sourceSync ? 'المزامنة' : 'استيراد CSV';
+        return ($created ? 'تمت ' : 'تم ') . $action . ' عبر ' . $channel . '.';
     }
 
     private static function classifyRow(PDO $db, array $csvRow, array $emailCounts, bool $includeImportedFields = false): array
