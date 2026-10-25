@@ -1,10 +1,10 @@
-const CACHE_NAME = 'crm-pwa-shell-v6';
+const CACHE_NAME = 'crm-pwa-shell-v7';
 const APP_SHELL = [
   '/',
   '/manifest.json',
   '/icons/crm-icon.png',
   '/icons/crm-icon-512.png',
-  '/assets/app.css?v=crm-customer-groups-v2-20261026',
+  '/assets/app.css?v=crm-mobile-pass-20261026',
   '/assets/app.js?v=crm-gregorian-dates-v1-20261026',
 ];
 
