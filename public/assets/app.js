@@ -117,7 +117,7 @@ async function submitLogin(event) {
 
 function shell(content, activeKey, title) {
   const visibleRoutes = routes.filter(([key]) => !((['team', 'settings'].includes(key) && state.user.role !== 'admin') || (['import', 'reports'].includes(key) && state.user.role === 'member')));
-  const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
+  const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}" aria-label="${label}" title="${label}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
   const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
   return `<div class="shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">CRM</span><span class="brand-text">إدارة العملاء</span></div><nav class="nav">${navigation}</nav><div class="side-bottom"><button class="side-action" data-action="logout">${icon('logout')}<span class="side-label">تسجيل الخروج</span></button><div class="user-mini"><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div></div></div></aside>
   <section class="main"><header class="topbar"><div class="top-title">${title}</div><div class="top-actions">${canEditCustomers() ? '<button class="btn primary desktop-action" data-action="new-customer">+ عميل جديد</button>' : ''}<span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span></div></header><main class="content">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
@@ -492,18 +492,26 @@ function taskCalendarMarkup(tasks) {
     byDay[day].push(task);
     return byDay;
   }, {});
-  const days = Array.from({ length: 42 }, (_, index) => calendarDayMarkup(gridStart, index, month, grouped));
-  const dailyTasks = (grouped[state.selectedTaskDate] || []).map(taskCard).join('') || '<div class="empty">لا توجد مهام في هذا اليوم.</div>';
+  const today = riyadhDateKey(new Date());
+  const spokenDateFormatter = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const calendarContext = { month, grouped, today, spokenDateFormatter };
+  const days = Array.from({ length: 42 }, (_, index) => calendarDayMarkup(gridStart, index, calendarContext));
+  const dailyTasks = (grouped[state.selectedTaskDate] || []).map(taskCard).join('') || '<div class="empty">لا توجد مهام مجدولة لهذا اليوم.</div>';
   const monthName = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
-  return `<section class="panel task-calendar"><div class="panel-head"><h2>تقويم المهام</h2><div class="calendar-nav"><button class="btn small" data-action="calendar-previous" aria-label="الشهر السابق">‹</button><strong>${monthName}</strong><button class="btn small" data-action="calendar-next" aria-label="الشهر التالي">›</button></div></div><div class="panel-body"><div class="calendar-grid calendar-weekdays">${['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${days.join('')}</div><div class="calendar-day-tasks"><h3>مهام ${escapeHtml(state.selectedTaskDate)}</h3>${dailyTasks}</div></div></section>`;
+  const selectedDate = new Date(`${state.selectedTaskDate}T00:00:00Z`);
+  const selectedLabel = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selectedDate);
+  return `<section class="panel task-calendar"><div class="panel-head"><h2>تقويم المهام</h2><div class="calendar-nav"><button class="btn small" data-action="calendar-previous" aria-label="الشهر السابق">‹</button><strong>${monthName}</strong><button class="btn small" data-action="calendar-next" aria-label="الشهر التالي">›</button></div></div><div class="panel-body"><div class="calendar-grid calendar-weekdays">${['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${days.join('')}</div><div class="calendar-day-tasks"><h3>مهام يوم ${escapeHtml(selectedLabel)}</h3>${dailyTasks}</div></div></section>`;
 }
 
-function calendarDayMarkup(gridStart, index, month, tasksByDay) {
+function calendarDayMarkup(gridStart, index, calendarContext) {
   const date = new Date(gridStart.getTime() + index * 86400000);
   const dateKey = date.toISOString().slice(0, 10);
-  const taskCount = (tasksByDay[dateKey] || []).length;
-  const classes = ['calendar-day', dateKey.slice(5, 7) === String(month).padStart(2, '0') ? '' : 'outside-month', dateKey === state.selectedTaskDate ? 'selected' : ''].filter(Boolean).join(' ');
-  return `<button class="${classes}" type="button" data-action="select-calendar-day" data-day="${dateKey}" aria-pressed="${dateKey === state.selectedTaskDate}"><span>${date.getUTCDate()}</span>${taskCount ? `<small>${taskCount} ${taskCount === 1 ? 'مهمة' : 'مهام'}</small>` : '<small class="calendar-empty">—</small>'}</button>`;
+  const taskCount = (calendarContext.grouped[dateKey] || []).length;
+  const isToday = dateKey === calendarContext.today;
+  const classes = ['calendar-day', dateKey.slice(5, 7) === String(calendarContext.month).padStart(2, '0') ? '' : 'outside-month', dateKey === state.selectedTaskDate ? 'selected' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+  const spokenDate = calendarContext.spokenDateFormatter.format(date);
+  const taskLabel = `${taskCount} ${taskCount === 1 ? 'مهمة' : 'مهام'}`;
+  return `<button class="${classes}" type="button" data-action="select-calendar-day" data-day="${dateKey}" aria-label="${spokenDate}، ${taskCount ? taskLabel : 'لا توجد مهام'}${isToday ? '، اليوم' : ''}" aria-pressed="${dateKey === state.selectedTaskDate}"><span>${date.getUTCDate()}</span>${taskCount ? `<small>${taskLabel}</small>` : '<small class="calendar-empty">—</small>'}</button>`;
 }
 
 function renderImport() {
