@@ -1155,6 +1155,38 @@ td::before {
   .topbar { background:#f8f9ff;backdrop-filter:none }
 }
 
+.customer-list-panel { overflow:hidden }
+.saved-view-bar {
+  display:grid;
+  grid-template-columns:minmax(180px,.8fr) minmax(220px,1fr) auto;
+  align-items:end;
+  gap:16px;
+  padding:18px 20px;
+  border-bottom:1px solid var(--line);
+  background:#fbfcff
+}
+.saved-view-intro { display:grid;gap:4px;padding-bottom:3px }
+.saved-view-intro strong { color:#0b1c30;font-size:14px }
+.saved-view-intro small { color:var(--muted);font-size:11px;line-height:1.6 }
+.saved-view-select { min-width:0 }
+.saved-view-actions { display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+.saved-view-actions .btn { min-height:40px;padding-inline:12px;white-space:nowrap }
+.danger-outline { color:var(--red);border-color:#f0c5c1;background:#fff }
+.danger-outline:hover { background:#fff4f2;border-color:#d89089 }
+.customer-filters { display:grid;gap:18px;padding:20px;border-bottom:1px solid var(--line);background:#fff }
+.filter-heading { display:flex;align-items:center;justify-content:space-between;gap:16px }
+.filter-heading h2 { margin:0;color:#0b1c30;font-size:16px }
+.filter-heading p { margin:4px 0 0;color:var(--muted);font-size:12px }
+.filter-count { display:inline-flex;align-items:center;min-height:29px;padding:5px 10px;border-radius:999px;background:var(--surface-low);color:var(--primary);font-size:11px;font-weight:650;white-space:nowrap }
+.customer-filter-fields { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 12px }
+.customer-filter-fields .field { min-width:0 }
+.customer-filter-fields .filter-search-field { grid-column:span 2 }
+.customer-filter-fields .field input,.customer-filter-fields .field select,.filter-sort-fields .field select,.saved-view-select select { min-height:44px;border-color:#c8d0df;border-radius:10px }
+.filter-footer { display:flex;align-items:end;justify-content:space-between;gap:18px;padding-top:16px;border-top:1px solid #edf0f6 }
+.filter-sort-fields { display:grid;grid-template-columns:repeat(2,minmax(150px,200px));gap:12px;flex:1 }
+.filter-actions { display:flex;align-items:center;gap:9px;flex:none }
+.filter-actions .btn { min-height:42px;padding-inline:18px }
+
 @media(max-width:1023px) {
   .sidebar { width:76px;padding:20px 10px }
   .sidebar .brand-copy,.sidebar .brand-badge,.sidebar .nav-label,.sidebar .user-info,.logout-action { display:none }
@@ -1170,11 +1202,16 @@ td::before {
   .dashboard-grid { grid-template-columns:minmax(0,1.2fr) minmax(270px,.9fr);gap:14px }
   .dashboard-task-row { grid-template-columns:30px minmax(0,1fr) auto;gap:8px;padding:12px }
   .dashboard-task-row > .task-open { display:none }
+  .saved-view-bar { grid-template-columns:minmax(170px,.8fr) minmax(210px,1fr);gap:12px }
+  .saved-view-actions { grid-column:1 / -1 }
+  .customer-filter-fields { grid-template-columns:repeat(3,minmax(0,1fr)) }
 }
 
 @media(max-width:900px) {
   .dashboard-grid { grid-template-columns:1fr }
   .dashboard-side { grid-template-columns:repeat(2,minmax(0,1fr));align-items:start }
+  .filter-footer { align-items:stretch;flex-direction:column }
+  .filter-sort-fields { grid-template-columns:repeat(2,minmax(0,1fr));flex:none }
 }
 
 @media(max-width:639px) {
@@ -1214,4 +1251,20 @@ td::before {
   .dashboard-side-list { padding-inline:12px }
   .dashboard-customer-panel .dashboard-panel-head { flex-wrap:wrap }
   .dashboard-customer-panel .dashboard-panel-head .btn { margin-inline-start:auto }
+  .saved-view-bar { grid-template-columns:minmax(0,1fr);gap:12px;padding:15px }
+  .saved-view-actions { grid-column:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px }
+  .saved-view-actions [data-action="save-view"] { grid-column:1 / -1 }
+  .saved-view-actions .btn { min-width:0;padding-inline:7px;font-size:11px }
+  .customer-filters { gap:15px;padding:16px 14px }
+  .filter-heading { align-items:flex-start }
+  .filter-heading h2 { font-size:15px }
+  .filter-heading p { font-size:11px }
+  .customer-filter-fields { grid-template-columns:minmax(0,1fr);gap:11px }
+  .customer-filter-fields .filter-search-field { grid-column:auto }
+  .customer-filter-fields .field label,.filter-sort-fields .field label { font-size:11px }
+  .customer-filter-fields .field input,.customer-filter-fields .field select,.filter-sort-fields .field select { min-height:42px;font-size:12px }
+  .filter-footer { gap:14px;padding-top:14px }
+  .filter-sort-fields { gap:9px }
+  .filter-actions { display:grid;grid-template-columns:1fr 1fr }
+  .filter-actions .btn { min-height:42px;padding-inline:8px;font-size:11px }
 }
