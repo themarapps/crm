@@ -11,11 +11,16 @@ if [[ ! -r "$pool_config" ]]; then
 fi
 
 pool_value() {
-  awk -v name="$1" '$0 ~ "^[[:space:]]*env\\[" name "\\][[:space:]]*=" {
-    sub(/^[^=]*=[[:space:]]*"/, "")
-    sub(/".*$/, "")
-    print
-    exit
+  awk -v name="$1" '{
+    line = $0
+    sub(/^[[:space:]]*/, "", line)
+    if (index(line, "env[" name "]") == 1) {
+      sub(/^[^=]*=[[:space:]]*/, "", line)
+      sub(/^"/, "", line)
+      sub(/"$/, "", line)
+      print line
+      exit
+    }
   }' "$pool_config"
 }
 
