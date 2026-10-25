@@ -1465,6 +1465,8 @@ td::before {
   .top-actions .icon-button { width:34px;height:36px }
   .top-avatar { width:30px;height:30px }
   .global-search input { padding-inline:32px 8px;font-size:10px }
+  .mobile-nav a { flex:1 1 0;min-width:0;gap:1px;padding-inline:1px;font-size:8px;line-height:1.15 }
+  .mobile-nav .nav-icon { width:16px;height:16px }
   .dashboard-stats { gap:7px }
   .dashboard-stat { padding:11px }
   .dashboard-stat .stat-number { font-size:24px }
