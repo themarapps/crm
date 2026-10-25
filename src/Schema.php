@@ -40,6 +40,7 @@ final class Schema
         self::createCustomersTable($db, $types);
         self::createNotesTable($db, $types);
         self::createActivityTable($db, $types);
+        self::createIntegrationSettingsTable($db, $types);
         self::createTasksTable($db, $types);
         self::createLoginAttemptsTable($db, $types);
     }
@@ -88,6 +89,15 @@ final class Schema
             id {$id}, customer_id BIGINT NOT NULL, user_id BIGINT NULL,
             event_type {$text} NOT NULL, summary {$longText} NOT NULL,
             created_at DATETIME NOT NULL{$indexes}
+        ){$engine}");
+    }
+
+    private static function createIntegrationSettingsTable(PDO $db, array $types): void
+    {
+        $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
+        $db->exec("CREATE TABLE IF NOT EXISTS integration_settings (
+            id INTEGER PRIMARY KEY, source_url {$text} NOT NULL,
+            credentials_ciphertext {$longText} NOT NULL, updated_at DATETIME NOT NULL
         ){$engine}");
     }
 

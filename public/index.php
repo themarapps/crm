@@ -10,6 +10,8 @@ require_once dirname(__DIR__) . '/src/ActivityLog.php';
 require_once dirname(__DIR__) . '/src/CsvImporter.php';
 require_once dirname(__DIR__) . '/src/TaskService.php';
 require_once dirname(__DIR__) . '/src/TeamService.php';
+require_once dirname(__DIR__) . '/src/SecretCipher.php';
+require_once dirname(__DIR__) . '/src/IntegrationSettingsService.php';
 require_once dirname(__DIR__) . '/src/DashboardService.php';
 require_once dirname(__DIR__) . '/src/Time.php';
 
@@ -35,7 +37,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 if ($method === 'GET' && str_starts_with($path, '/assets/') && is_file(__DIR__ . $path)) {
     return false;
 }
-if ($method === 'GET' && ($path === '/' || preg_match('#^/(dashboard|customers(?:/\d+)?|tasks|import|team|reports)$#', $path))) {
+if ($method === 'GET' && ($path === '/' || preg_match('#^/(dashboard|customers(?:/\d+)?|tasks|import|team|reports|settings)$#', $path))) {
     header('Content-Type: text/html; charset=utf-8');
     readfile(__DIR__ . '/index.html');
     exit;
@@ -74,6 +76,14 @@ try {
     }
     if ($path === '/api/reports/summary' && $method === 'GET') {
         CustomerService::report($db, $user);
+    }
+    if ($path === '/api/settings/source' && $method === 'GET') {
+        Auth::requireAdmin($user);
+        IntegrationSettingsService::show($db);
+    }
+    if ($path === '/api/settings/source' && $method === 'PUT') {
+        Auth::requireAdmin($user);
+        IntegrationSettingsService::save($db, Http::body());
     }
     if ($path === '/api/customers' && $method === 'GET') {
         CustomerService::list($db, $_GET, $user);

@@ -9,6 +9,7 @@ const routes = [
   ['dashboard', '/', 'الرئيسية', 'home'], ['customers', '/customers', 'العملاء', 'customers'],
   ['tasks', '/tasks', 'المهام', 'tasks'], ['reports', '/reports', 'التقارير', 'reports'],
   ['import', '/import', 'استيراد', 'import'], ['team', '/team', 'الفريق', 'team'],
+  ['settings', '/settings', 'الربط', 'settings'],
 ];
 const icons = {
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -17,6 +18,7 @@ const icons = {
   import: '<path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
   team: '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20a6 6 0 0 1 12 0M15 16a5 5 0 0 1 6 4"/>',
   reports: '<path d="M4 19V5m0 14h16"/><path d="M8 15v-4m4 4V7m4 8v-6m4 6V4"/>',
+  settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="m19.4 15 .1.1a1.7 1.7 0 0 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 0 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1A1.7 1.7 0 0 0 4.2 12h-.2a1.7 1.7 0 0 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2v-.2a1.7 1.7 0 0 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 0 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2 2.9Z"/>',
   logout: '<path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/>',
 };
 
@@ -96,7 +98,7 @@ async function submitLogin(event) {
 }
 
 function shell(content, activeKey, title) {
-  const visibleRoutes = routes.filter(([key]) => !((key === 'team' && state.user.role !== 'admin') || (['import', 'reports'].includes(key) && state.user.role === 'member')));
+  const visibleRoutes = routes.filter(([key]) => !((['team', 'settings'].includes(key) && state.user.role !== 'admin') || (['import', 'reports'].includes(key) && state.user.role === 'member')));
   const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
   const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
   return `<div class="shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">CRM</span><span class="brand-text">إدارة العملاء</span></div><nav class="nav">${navigation}</nav><div class="side-bottom"><button class="side-action" data-action="logout">${icon('logout')}<span class="side-label">تسجيل الخروج</span></button><div class="user-mini"><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div></div></div></aside>
@@ -137,6 +139,7 @@ async function render() {
     if (route[0] === 'reports' && state.user.role !== 'member') return await renderReports();
     if (route[0] === 'import' && state.user.role !== 'member') return renderImport();
     if (route[0] === 'team' && state.user.role === 'admin') return await renderTeam();
+    if (route[0] === 'settings' && state.user.role === 'admin') return await renderIntegrationSettings();
     location.hash = '#/dashboard';
   } catch (error) { showError(error); }
 }
@@ -162,6 +165,49 @@ async function renderReports() {
   const reportGroup = (title, rows) => `<section class="panel"><div class="panel-head"><h2>${title}</h2></div><div class="panel-body report-list">${rows.length ? rows.map((row) => `<div class="report-row"><span>${escapeHtml(labels[row.label] || row.label || 'غير محدد')}</span><strong>${escapeHtml(row.total)}</strong></div>`).join('') : '<div class="empty">لا توجد بيانات بعد.</div>'}</div></section>`;
   app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div>`, 'reports', 'التقارير');
   bindShell();
+}
+
+async function renderIntegrationSettings() {
+  const settings = await request('/api/settings/source');
+  app.innerHTML = shell(integrationSettingsMarkup(settings), 'settings', 'إعدادات الربط');
+  bindShell();
+  bindIntegrationForm();
+}
+
+function integrationSettingsMarkup(settings) {
+  const notice = settings.encryption_ready
+    ? '<div class="notice integration-note">بيانات الدخول تحفظ مشفرة، ولا يعرض النظام كلمة المرور بعد الحفظ. هذه الصفحة تحفظ بيانات الاتصال؛ تفعيل المزامنة يحتاج ربط آلية المصدر.</div>'
+    : '<div class="error integration-note">يلزم إعداد مفتاح التشفير على الخادم قبل حفظ بيانات الدخول.</div>';
+  const status = settings.credentials_configured ? 'بيانات محفوظة' : 'غير مكتمل';
+  const userPlaceholder = settings.credentials_configured ? 'اتركه فارغًا للإبقاء على الحالي' : 'اسم المستخدم';
+  const passwordPlaceholder = settings.credentials_configured ? 'اتركها فارغة للإبقاء على الحالية' : 'كلمة المرور';
+  return `${pageHead('الربط بمصدر العملاء', 'احفظ بيانات الدخول للمصدر الذي تُجلب منه سجلات العملاء.')}${notice}
+    <section class="panel integration-panel"><div class="panel-head"><h2>بيانات الاتصال</h2><span class="badge ${settings.credentials_configured ? 'active' : 'neutral'}">${status}</span></div><div class="panel-body">
+    <form id="integration-form"><div class="form-grid"><div class="field full"><label for="source-url">الرابط الأساسي للمصدر</label><input id="source-url" name="source_url" type="url" value="${escapeHtml(settings.source_url)}" placeholder="https://example.com" required></div>
+    <div class="field"><label for="source-username">اسم المستخدم</label><input id="source-username" name="username" autocomplete="username" placeholder="${userPlaceholder}"></div>
+    <div class="field"><label for="source-password">كلمة المرور</label><input id="source-password" name="password" type="password" autocomplete="new-password" placeholder="${passwordPlaceholder}"></div></div>
+    <div id="integration-status" aria-live="polite"></div><div class="form-actions"><button class="btn primary" type="submit" ${settings.encryption_ready ? '' : 'disabled'}>حفظ بيانات الربط</button></div></form></div></section>`;
+}
+
+function bindIntegrationForm() {
+  document.querySelector('#integration-form').addEventListener('submit', saveIntegrationSettings);
+}
+
+async function saveIntegrationSettings(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    await request('/api/settings/source', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+    form.elements.password.value = '';
+    form.elements.username.value = '';
+    document.querySelector('#integration-status').innerHTML = '<div class="notice">تم حفظ بيانات الربط بشكل مشفر.</div>';
+  } catch (error) {
+    document.querySelector('#integration-status').innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function renderCustomers() {

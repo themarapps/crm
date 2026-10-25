@@ -338,6 +338,8 @@ button {
 .report-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid var(--line) }
 .report-row:last-child { border-bottom:0 }
 .activity-panel { margin-top:18px }
+.integration-note { margin-bottom:18px }
+.integration-panel { max-width:900px }
 .toolbar {
   display:flex;
   gap:9px;
@@ -735,13 +737,17 @@ td::before {
   inset-inline:0;
   height:64px;
   display:flex;
-  justify-content:space-around;
+  justify-content:flex-start;
   align-items:center;
   background:#fff;
   border-top:1px solid var(--line);
-  padding-bottom:env(safe-area-inset-bottom)
+  padding-bottom:env(safe-area-inset-bottom);
+  overflow-x:auto;
+  scrollbar-width:none
 }
+.mobile-nav::-webkit-scrollbar { display:none }
 .mobile-nav a {
+  flex:1 0 52px;
   display:grid;
   justify-items:center;
   gap:2px;
