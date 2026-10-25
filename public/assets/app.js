@@ -7,12 +7,18 @@ const labels = {
 };
 const customerStages = ['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'];
 const routes = [
-  ['dashboard', '/', 'الرئيسية', 'home'], ['customers', '/customers', 'العملاء', 'customers'],
-  ['tasks', '/tasks', 'المهام', 'tasks'], ['reports', '/reports', 'التقارير', 'reports'],
-  ['import', '/import', 'استيراد', 'import'], ['team', '/team', 'الفريق', 'team'],
-  ['settings', '/settings', 'الربط', 'settings'],
+  ['dashboard', '/', 'لوحة التحكم', 'home'], ['customers', '/customers', 'العملاء', 'customers'],
+  ['tasks', '/tasks', 'المهام والمواعيد', 'tasks'], ['reports', '/reports', 'التقارير', 'reports'],
+  ['import', '/import', 'استيراد CSV', 'import'], ['team', '/team', 'أعضاء الفريق', 'team'],
+  ['settings', '/settings', 'إعدادات الربط', 'settings'],
 ];
 const icons = {
+  brand: '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><path d="m10 10-4-4m8 0-4 4m0 4-4 4m8 0-4-4m0-4 4-4m-4 12 4-4"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18m-13 4 2 2 4-4"/>',
+  personAdd: '<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm11-3v6m3-3h-6"/>',
+  alert: '<path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
+  verified: '<path d="M12 3 14 5.5l3.2-.2.8 3.1 2.7 1.7-1.1 3 1.1 3-2.7 1.7-.8 3.1-3.2-.2L12 23l-2-2.5-3.2.2-.8-3.1-2.7-1.7 1.1-3-1.1-3 2.7-1.7.8-3.1 3.2.2L12 3Z"/><path d="m9 13 2 2 4-4"/>',
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   customers: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5"/>',
   tasks: '<path d="m5 12 4 4L19 6"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/>',
@@ -120,8 +126,9 @@ function shell(content, activeKey, title) {
   const visibleRoutes = routes.filter(([key]) => !((['team', 'settings'].includes(key) && state.user.role !== 'admin') || (['import', 'reports'].includes(key) && state.user.role === 'member')));
   const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}" aria-label="${label}" title="${label}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
   const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
-  return `<div class="shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">CRM</span><span class="brand-text">إدارة العملاء</span></div><nav class="nav">${navigation}</nav><div class="side-bottom"><button class="side-action" data-action="logout">${icon('logout')}<span class="side-label">تسجيل الخروج</span></button><div class="user-mini"><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div></div></div></aside>
-  <section class="main"><header class="topbar"><div class="top-title">${title}</div><div class="top-actions">${canEditCustomers() ? '<button class="btn primary desktop-action" data-action="new-customer">+ عميل جديد</button>' : ''}<span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span></div></header><main class="content">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
+  const memberInitial = escapeHtml((state.user.name || 'م').slice(0, 1));
+  return `<div class="shell"><aside class="sidebar"><div class="sidebar-top"><a class="brand" href="#/" aria-label="Smaguide CRM - لوحة التحكم"><span class="brand-mark">${icon('brand')}</span><span class="brand-copy"><strong>Smaguide CRM</strong><small>إدارة اشتراكات ومتابعات العملاء</small></span></a><span class="brand-badge"><i></i>نسخة الفريق الداخلي</span><nav class="nav">${navigation}</nav></div><div class="side-bottom"><div class="user-mini"><span class="avatar">${memberInitial}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div><button class="icon-button logout-action" data-action="logout" type="button" aria-label="تسجيل الخروج" title="تسجيل الخروج">${icon('logout')}</button></div></div></aside>
+  <section class="main"><header class="topbar"><form class="global-search" id="global-search" role="search"><label class="sr-only" for="global-customer-search">بحث سريع عن العملاء</label>${icon('search')}<input id="global-customer-search" name="q" type="search" placeholder="بحث سريع عن العملاء بالاسم، البريد أو رقم الجوال..."></form><div class="top-actions"><a class="icon-button calendar-shortcut" href="#/tasks" aria-label="المهام والمواعيد" title="المهام والمواعيد">${icon('calendar')}</a>${canEditCustomers() ? `<button class="btn primary desktop-action" data-action="new-customer" type="button" aria-label="إضافة عميل جديد">${icon('personAdd')}<span class="quick-create-label">إضافة عميل جديد</span></button>` : ''}<span class="avatar top-avatar" aria-label="${escapeHtml(state.user.name)}" title="${escapeHtml(state.user.name)}">${memberInitial}</span></div></header><main class="content" aria-label="${title}">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
 }
 
 function pageHead(title, description, action = '') {
@@ -179,18 +186,41 @@ async function render() {
 async function renderDashboard() {
   const [dashboard, customers] = await Promise.all([request('/api/dashboard'), request('/api/customers?per_page=6&sort=registered_at&direction=desc')]);
   const counts = dashboard.counts;
-  const overdueRows = dashboard.overdue_tasks.length ? dashboard.overdue_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div><a class="btn small" href="#/customers/${task.customer_id}">فتح العميل</a></div>`).join('') : '';
-  const taskRows = dashboard.upcoming_tasks.length ? dashboard.upcoming_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><div class="person"><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div></div><a class="btn small" href="#/customers/${task.customer_id}">العميل</a></div>`).join('') : '<div class="empty">لا توجد متابعات قادمة.</div>';
-  const inactiveRows = dashboard.inactive_customers.length ? dashboard.inactive_customers.map((customer) => `<div class="task-row"><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(labels[customer.crm_stage] || customer.crm_stage)} · آخر تواصل مسجل ${dateLabel(customer.last_contact_at)}</small></div><a class="btn small" href="#/customers/${customer.id}">فتح العميل</a></div>`).join('') : '<div class="empty">لا يوجد عملاء تجاوزوا 14 يومًا بلا تواصل مسجل.</div>';
-  const customerRows = customers.data.length ? customers.data.map(customerRow).join('') : '<div class="empty">أضف أول عميل لبدء المتابعة.</div>';
-  app.innerHTML = shell(`${pageHead('الرئيسية', 'ملخص سريع للعملاء والمهام اليومية.')}${overdueRows ? `<section class="panel overdue-panel"><div class="panel-head"><h2>متابعات تحتاج إجراء</h2><span class="badge danger">${counts.overdue_tasks} متأخرة</span></div><div class="panel-body">${overdueRows}</div></section>` : ''}
-    <div class="stats">${statCard('إجمالي العملاء', counts.customers)}${statCard('اشتراكات نشطة', counts.active_subscriptions)}${statCard('عملاء جدد', counts.new_customers)}${statCard('متابعات متأخرة', counts.overdue_tasks, counts.today_tasks ? `${counts.today_tasks} متابعة اليوم` : '')}</div>
-    <div class="grid-two"><section class="panel"><div class="panel-head"><h2>المتابعات القادمة</h2><a class="btn small" href="#/tasks">كل المهام</a></div><div class="panel-body">${taskRows}</div></section><section class="panel"><div class="panel-head"><h2>أحدث العملاء</h2><a class="btn small" href="#/customers">عرض الكل</a></div><div class="panel-body">${customerRows}</div></section></div><section class="panel"><div class="panel-head"><h2>عملاء بلا تواصل مسجل منذ 14 يومًا</h2><a class="btn small" href="#/customers">كل العملاء</a></div><div class="panel-body">${inactiveRows}</div></section>`, 'dashboard', 'نظرة عامة');
+  const activeRate = counts.customers ? Math.round((counts.active_subscriptions / counts.customers) * 100) : 0;
+  const overdueRows = dashboard.overdue_tasks.slice(0, 4).map((task) => dashboardTaskRow(task, 'overdue')).join('');
+  const upcomingRows = dashboard.upcoming_tasks.slice(0, 6).map((task) => dashboardTaskRow(task)).join('');
+  const inactiveRows = dashboard.inactive_customers.slice(0, 4).map((customer) => `<a class="dashboard-inactive-row" href="#/customers/${customer.id}"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span class="dashboard-inactive-copy"><strong>${escapeHtml(customer.name)}</strong><small>آخر تواصل مسجل ${dateLabel(customer.last_contact_at)}</small></span><span class="badge">${escapeHtml(labels[customer.crm_stage] || customer.crm_stage)}</span></a>`).join('');
+  const customerRows = customers.data.map(dashboardCustomerRow).join('');
+  const dashboardActions = `<div class="dashboard-head-actions">${state.user.role !== 'member' ? '<a class="btn secondary-action" href="#/import">' + icon('import') + '<span>استيراد CSV</span></a>' : ''}${canEditCustomers() ? `<button class="btn primary" data-action="new-customer" type="button">${icon('personAdd')}<span>إضافة عميل جديد</span></button>` : ''}</div>`;
+  app.innerHTML = shell(`${pageHead('<span>لوحة التحكم الرئيسية</span><span class="live-badge"><i></i>مُحدَّث الآن</span>', 'متابعة أداء العملاء والاشتراكات ومهام الفريق اليومية.', dashboardActions)}
+    <section class="stats dashboard-stats">${dashboardStat({ label: 'إجمالي العملاء المسجلين', value: counts.customers, iconName: 'customers', tone: 'plum', note: 'قاعدة عملائك' })}${dashboardStat({ label: 'الاشتراكات النشطة', value: counts.active_subscriptions, iconName: 'verified', tone: 'green', note: `${activeRate}% من العملاء`, progress: activeRate })}${dashboardStat({ label: 'عملاء في مرحلة جديد', value: counts.new_customers, iconName: 'personAdd', tone: 'blue', note: 'بحاجة إلى بدء التواصل' })}${dashboardStat({ label: 'المتابعات المتأخرة', value: counts.overdue_tasks, iconName: 'alert', tone: counts.overdue_tasks ? 'red' : 'green', note: counts.overdue_tasks ? 'تحتاج إلى إجراء' : 'لا توجد متابعات متأخرة' })}</section>
+    <div class="dashboard-grid"><section class="panel dashboard-tasks"><div class="dashboard-panel-head"><span class="section-icon plum">${icon('calendar')}</span><div class="dashboard-panel-title"><h2>المتابعات القادمة</h2><small>${dashboard.upcoming_tasks.length ? `أقرب ${dashboard.upcoming_tasks.length} مهام مجدولة` : 'تابع مواعيد الفريق اليومية'}</small></div><a class="btn small" href="#/tasks">عرض التقويم</a></div><div class="dashboard-task-list">${upcomingRows || '<div class="dashboard-empty"><span class="section-icon soft">' + icon('calendar') + '</span><strong>لا توجد متابعات قادمة</strong><span>أضف موعدًا لمتابعة عميلك في الوقت المناسب.</span><a class="btn secondary-action" href="#/tasks">فتح المهام والمواعيد</a></div>'}</div><a class="dashboard-panel-link" href="#/tasks">عرض كل مهام ومواعيد الفريق <span aria-hidden="true">←</span></a></section>
+      <div class="dashboard-side"><section class="panel dashboard-alerts"><div class="dashboard-panel-head"><span class="section-icon ${counts.overdue_tasks ? 'red' : 'green'}">${icon(counts.overdue_tasks ? 'alert' : 'verified')}</span><div class="dashboard-panel-title"><h2>المتابعات المتأخرة</h2><small>${counts.overdue_tasks ? `${counts.overdue_tasks} متابعة تحتاج إلى إجراء` : 'حالة المتابعات منتظمة'}</small></div><span class="badge ${counts.overdue_tasks ? 'danger' : 'active'}">${counts.overdue_tasks}</span></div><div class="dashboard-side-list">${overdueRows || '<div class="dashboard-quiet-empty">لا توجد مهام متأخرة حاليًا.</div>'}</div>${counts.overdue_tasks ? '<a class="dashboard-panel-link" href="#/tasks">معالجة المتابعات <span aria-hidden="true">←</span></a>' : ''}</section>
+      <section class="panel dashboard-inactive"><div class="dashboard-panel-head"><span class="section-icon blue">${icon('customers')}</span><div class="dashboard-panel-title"><h2>عملاء بلا تواصل</h2><small>لم يُسجل تواصل منذ 14 يومًا</small></div><span class="badge">آخر الحالات</span></div><div class="dashboard-side-list">${inactiveRows || '<div class="dashboard-quiet-empty">لا يوجد عملاء متأخرون عن التواصل.</div>'}</div><a class="dashboard-panel-link" href="#/customers">عرض العملاء <span aria-hidden="true">←</span></a></section></div></div>
+    <section class="panel dashboard-customer-panel"><div class="dashboard-panel-head"><span class="section-icon green">${icon('customers')}</span><div class="dashboard-panel-title"><h2>العملاء المضافون حديثًا</h2><small>أحدث العملاء المسجلين في النظام</small></div><a class="btn small" href="#/customers">عرض دليل العملاء</a></div><div class="table-wrap"><table><thead><tr><th>اسم العميل</th><th>الباقة</th><th>مرحلة المتابعة</th><th>تاريخ التسجيل</th><th>حالة الاشتراك</th></tr></thead><tbody>${customerRows || '<tr><td colspan="5"><div class="empty">أضف أول عميل لبدء المتابعة.</div></td></tr>'}</tbody></table></div></section>`, 'dashboard', 'لوحة التحكم');
   bindShell();
 }
 
-function customerRow(customer) {
-  return `<a class="customer-row" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small><small>${dateTimeLabel(customer.registered_at)}</small></div></div>${badge(customer.subscription_status)}</a>`;
+function dashboardStat({ label, value, iconName, tone, note, progress }) {
+  const footer = progress === undefined ? `<div class="metric-note ${tone === 'red' ? 'danger-text' : ''}">${escapeHtml(note)}</div>` : `<div class="metric-progress" role="img" aria-label="${escapeHtml(note)}"><span style="width:${Math.max(0, Math.min(100, Number(progress)))}%"></span></div><small class="metric-progress-label">${escapeHtml(note)}</small>`;
+  return `<article class="stat dashboard-stat tone-${tone}"><div class="metric-main"><div><span class="stat-label">${escapeHtml(label)}</span><strong class="stat-number">${escapeHtml(value)}</strong></div><span class="metric-icon ${tone}">${icon(iconName)}</span></div><div class="metric-footer">${footer}</div></article>`;
+}
+
+function dashboardTaskRow(task, status = 'upcoming') {
+  const overdue = status === 'overdue';
+  const dueDate = taskDateTimeLabel(task.due_at);
+  return `<article class="dashboard-task-row"><span class="task-marker ${overdue ? 'overdue' : ''}">${icon(overdue ? 'alert' : 'calendar')}</span><div class="dashboard-task-copy"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.customer_name)} · ${escapeHtml(task.assignee_name || 'غير معين')}</small></div><span class="task-due ${overdue ? 'overdue' : ''}">${dueDate}</span><a class="btn task-open" href="#/customers/${task.customer_id}">العميل</a></article>`;
+}
+
+function dashboardCustomerRow(customer) {
+  return `<tr><td data-label="اسم العميل"><a class="table-person dashboard-customer-link" href="#/customers/${customer.id}"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></span></a></td><td data-label="الباقة">${escapeHtml(customer.plan || '—')}</td><td data-label="مرحلة المتابعة">${badge(customer.crm_stage)}</td><td data-label="تاريخ التسجيل">${dateTimeLabel(customer.registered_at)}</td><td data-label="حالة الاشتراك">${badge(customer.subscription_status)}</td></tr>`;
+}
+
+function taskDateTimeLabel(dateText) {
+  if (!dateText) return 'موعد غير محدد';
+  const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
+  return new Intl.DateTimeFormat('ar-SA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }).format(date);
 }
 
 async function renderReports() {
@@ -644,6 +674,16 @@ async function renderTeam() {
 
 function bindShell() {
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button)));
+  document.querySelector('#global-search')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const query = String(new FormData(event.currentTarget).get('q') || '').trim();
+    state.filters = query ? { q: query } : {};
+    state.selectedView = '';
+    state.selectedCustomers.clear();
+    state.page = 1;
+    location.hash = '#/customers';
+    render();
+  });
 }
 
 async function runAction(button) {
