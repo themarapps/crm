@@ -146,6 +146,17 @@ function dateLabel(dateText) {
   return Number.isNaN(date.valueOf()) ? escapeHtml(dateText) : new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(date);
 }
 
+function dateTimeLabel(dateText) {
+  if (!dateText) return 'وقت التسجيل غير متوفر';
+  const hasTime = /\d{1,2}:\d{2}/.test(dateText);
+  const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
+  const options = { dateStyle: 'medium', timeZone: 'Asia/Riyadh' };
+  if (hasTime) options.timeStyle = 'short';
+  const formatted = new Intl.DateTimeFormat('ar-SA', options).format(date);
+  return hasTime ? `تاريخ ووقت التسجيل: ${formatted}` : `تاريخ التسجيل: ${formatted} · الوقت غير متوفر`;
+}
+
 async function render() {
   if (!state.user) return renderLogin();
   const route = routePath().split('/');
@@ -176,7 +187,7 @@ async function renderDashboard() {
 }
 
 function customerRow(customer) {
-  return `<a class="customer-row" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></div></div>${badge(customer.subscription_status)}</a>`;
+  return `<a class="customer-row" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small><small>${dateTimeLabel(customer.registered_at)}</small></div></div>${badge(customer.subscription_status)}</a>`;
 }
 
 async function renderReports() {
