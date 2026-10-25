@@ -426,9 +426,10 @@ function customerListMarkup(list) {
   const viewOptions = views.map((view) => `<option value="${escapeHtml(view.name)}" ${state.selectedView === view.name ? 'selected' : ''}>${escapeHtml(view.name)}</option>`).join('');
   const exportLink = ['admin', 'manager'].includes(state.user.role) ? `<a class="btn" href="/api/customers/export.csv?${list.params}">تصدير CSV</a>` : '';
   const createButton = canEditCustomers() ? '<button class="btn primary" data-action="new-customer">+ إضافة عميل</button>' : '';
-  return `${pageHead('العملاء', `إجمالي ${list.response.total} عميل`, `${exportLink}${createButton}`)}
-    <section class="panel customer-list-panel"><div class="toolbar saved-view-bar"><div class="saved-view-intro"><strong>عروضك المحفوظة</strong><small>احفظ مجموعة فلاتر لتصل إليها بسرعة لاحقًا</small></div><div class="field saved-view-select"><label for="saved-view">العروض المحفوظة على هذا الجهاز</label><select id="saved-view"><option value="">اختر عرضًا</option>${viewOptions}</select></div><div class="saved-view-actions"><button class="btn" type="button" data-action="save-view">حفظ العرض الحالي</button><button class="btn" type="button" data-action="rename-view" ${!state.selectedView ? 'disabled' : ''}>إعادة تسمية</button><button class="btn danger-outline" type="button" data-action="delete-view" ${!state.selectedView ? 'disabled' : ''}>حذف</button></div></div>
-    ${customerFiltersMarkup(list.options, list.team.data)}${bulkToolbarMarkup(list.team.data)}${customerTableMarkup(list.response, list.team.data)}</section>`;
+  const customerActions = `<div class="customer-page-actions">${exportLink}${createButton}</div>`;
+  return `${pageHead('العملاء', `إجمالي ${customerCountLabel(list.response.total)}`, customerActions)}
+    <section class="panel customer-list-panel"><div class="toolbar saved-view-bar"><div class="saved-view-intro"><strong>عروضك المحفوظة</strong><small>احفظ الفلاتر المتكررة لتصل إليها بسرعة</small></div><div class="field saved-view-select"><label for="saved-view">اختر عرضًا محفوظًا</label><select id="saved-view"><option value="">${state.selectedView ? 'إلغاء العرض المحفوظ' : 'اختر عرضًا محفوظًا'}</option>${viewOptions}</select></div><div class="saved-view-actions"><button class="btn" type="button" data-action="save-view">حفظ العرض الحالي</button>${state.selectedView ? `<button class="btn" type="button" data-action="rename-view">إعادة تسمية</button><button class="btn danger-outline" type="button" data-action="delete-view">حذف العرض</button>` : ''}</div></div>
+    ${customerFiltersMarkup(list.options, list.team.data)}${bulkToolbarMarkup(list.team.data, list.response.data)}${customerTableMarkup(list.response, list.team.data)}</section>`;
 }
 
 function customerFiltersMarkup(options, members) {
@@ -441,11 +442,12 @@ function customerFiltersMarkup(options, members) {
   const campaignOptions = options.campaigns.map((campaign) => `<option value="${escapeHtml(campaign)}" ${state.filters.campaign === campaign ? 'selected' : ''}>${escapeHtml(campaign)}</option>`).join('');
   const tagOptions = options.tags.map((tag) => `<option value="${tag.id}" ${state.filters.tag === String(tag.id) ? 'selected' : ''}>${escapeHtml(tag.name)}</option>`).join('');
   const activeCount = ['q', 'subscription_status', 'payment_status', 'plan', 'stage', 'assigned_to', 'lead_source', 'campaign', 'tag'].filter((key) => String(state.filters[key] || '').trim()).length;
-  return `<form class="customer-filters" id="filters"><div class="filter-heading"><div><h2>تصفية العملاء</h2><p>بيانات الاشتراك من المنصة، وتصنيفات المتابعة من CRM.</p></div><span class="filter-count">عدد الفلاتر النشطة: ${activeCount}</span></div>
-    <div class="field filter-search-field"><label for="filter-q">بحث بالاسم أو البريد أو الهاتف</label><input class="search" id="filter-q" name="q" value="${escapeHtml(state.filters.q || '')}" placeholder="اكتب اسم العميل أو بريده أو رقم هاتفه"></div>
-    <div class="customer-filter-groups"><section class="customer-filter-group platform-filter-group"><h3>بيانات المنصة</h3><div class="customer-filter-fields"><div class="field"><label for="filter-subscription">حالة الاشتراك</label><select id="filter-subscription" name="subscription_status"><option value="">كل الحالات</option>${subscriptionOptions}</select></div><div class="field"><label for="filter-payment">حالة الدفع</label><select id="filter-payment" name="payment_status"><option value="">كل الحالات</option>${paymentOptions}</select></div><div class="field"><label for="filter-plan">الباقة</label><select id="filter-plan" name="plan"><option value="">كل الباقات</option>${planOptions}</select></div></div></section>
+  const advancedActiveCount = ['subscription_status', 'payment_status', 'plan', 'stage', 'assigned_to', 'lead_source', 'campaign', 'tag'].filter((key) => String(state.filters[key] || '').trim()).length;
+  return `<form class="customer-filters" id="filters"><div class="filter-heading"><div><h2>البحث والفلاتر</h2><p>ابحث مباشرة، أو افتح الفلاتر لتضييق النتائج.</p></div><span class="filter-count">${activeCount ? `${activeCount} شروط نشطة` : 'بدون فلاتر نشطة'}</span></div>
+    <div class="customer-search-row"><div class="field filter-search-field"><label class="sr-only" for="filter-q">بحث بالاسم أو البريد أو الهاتف</label><span class="customer-search-icon">${icon('search')}</span><input class="search" id="filter-q" name="q" value="${escapeHtml(state.filters.q || '')}" placeholder="ابحث باسم العميل أو بريده أو هاتفه"></div><button class="btn primary customer-search-button" type="submit">عرض النتائج</button>${activeCount ? '<button class="btn clear-filter-button" type="button" data-action="clear-filters">مسح الفلاتر</button>' : ''}</div>
+    <details class="customer-filter-details"><summary><span><strong>فلاتر الاشتراك وCRM</strong><small>الحالة، الباقة، المرحلة، المسؤول والمصدر</small></span><span class="filter-count">${advancedActiveCount ? `${advancedActiveCount} نشطة` : 'بدون فلاتر'}</span></summary><div class="customer-filter-details-body"><div class="customer-filter-groups"><section class="customer-filter-group platform-filter-group"><h3>بيانات المنصة</h3><div class="customer-filter-fields"><div class="field"><label for="filter-subscription">حالة الاشتراك</label><select id="filter-subscription" name="subscription_status"><option value="">كل الحالات</option>${subscriptionOptions}</select></div><div class="field"><label for="filter-payment">حالة الدفع</label><select id="filter-payment" name="payment_status"><option value="">كل الحالات</option>${paymentOptions}</select></div><div class="field"><label for="filter-plan">الباقة</label><select id="filter-plan" name="plan"><option value="">كل الباقات</option>${planOptions}</select></div></div></section>
     <section class="customer-filter-group crm-filter-group"><h3>تصنيفات وحقول CRM</h3><div class="customer-filter-fields"><div class="field"><label for="filter-stage">مرحلة CRM</label><select id="filter-stage" name="stage"><option value="">كل المراحل</option>${stageOptions}</select></div><div class="field"><label for="filter-assignee">مسؤول CRM</label><select id="filter-assignee" name="assigned_to"><option value="">كل الفريق</option>${memberOptions}</select></div><div class="field"><label for="filter-source">مصدر الاكتساب</label><select id="filter-source" name="lead_source"><option value="">كل المصادر</option>${sourceOptions}</select></div><div class="field"><label for="filter-campaign">حملة CRM</label><select id="filter-campaign" name="campaign"><option value="">كل الحملات</option>${campaignOptions}</select></div><div class="field"><label for="filter-tag">وسم CRM</label><select id="filter-tag" name="tag"><option value="">كل الوسوم</option>${tagOptions}</select></div></div></section></div>
-    <div class="filter-footer"><div class="filter-sort-fields">${customerSortingMarkup()}</div><div class="filter-actions"><button class="btn primary" type="submit">تطبيق الفلاتر</button><button class="btn" type="button" data-action="clear-filters">مسح الفلاتر</button></div></div></form>`;
+    <div class="filter-footer"><div class="filter-sort-fields">${customerSortingMarkup()}</div><div class="filter-actions"><button class="btn primary" type="submit">تطبيق الفلاتر</button></div></div></div></details></form>`;
 }
 
 function customerSortingMarkup() {
@@ -454,29 +456,53 @@ function customerSortingMarkup() {
   return `<div class="field"><label for="filter-sort">الترتيب حسب</label><select id="filter-sort" name="sort">${options}</select></div><div class="field"><label for="filter-direction">الاتجاه</label><select id="filter-direction" name="direction"><option value="desc" ${(state.filters.direction || 'desc') === 'desc' ? 'selected' : ''}>تنازلي</option><option value="asc" ${state.filters.direction === 'asc' ? 'selected' : ''}>تصاعدي</option></select></div>`;
 }
 
-function bulkToolbarMarkup(members) {
+function bulkToolbarMarkup(members, visibleCustomers) {
   if (!canEditCustomers()) return '';
+  const selectedCount = state.selectedCustomers.size;
+  const selectedOnPage = visibleCustomers.filter((customer) => state.selectedCustomers.has(Number(customer.id))).length;
+  const allVisibleSelected = visibleCustomers.length > 0 && selectedOnPage === visibleCustomers.length;
+  const partiallyVisibleSelected = selectedOnPage > 0 && !allVisibleSelected;
   const memberOptions = members.filter((member) => member.is_active).map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
   const assignmentField = canViewAllCustomers() ? `<div class="field"><label for="bulk-assignee">المسؤول الجديد</label><select id="bulk-assignee"><option value="">بدون تغيير</option><option value="none">غير معين</option>${memberOptions}</select></div>` : '';
   const stageOptions = customerStages.map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
-  return `<div class="toolbar bulk-toolbar"><label><input id="select-visible-customers" type="checkbox"> تحديد الصفحة</label><span>${state.selectedCustomers.size} محدد</span><div class="field"><label for="bulk-stage">مرحلة CRM الجديدة</label><select id="bulk-stage"><option value="">بدون تغيير</option>${stageOptions}</select></div>${assignmentField}<button class="btn primary" type="button" data-action="bulk-update" ${state.selectedCustomers.size ? '' : 'disabled'}>تطبيق على المحدد</button></div>`;
+  return `<div class="toolbar bulk-toolbar"><div class="bulk-selection"><label><input id="select-visible-customers" type="checkbox" ${allVisibleSelected ? 'checked' : ''} ${partiallyVisibleSelected ? 'aria-checked="mixed"' : ''} ${visibleCustomers.length ? '' : 'disabled'}><span>تحديد العملاء في الصفحة</span></label><span class="bulk-selection-count" aria-live="polite">${selectedCount ? `${selectedCount} عميل محدد` : 'إجراءات جماعية'}</span></div>${selectedCount ? `<div class="bulk-controls"><div class="field"><label for="bulk-stage">مرحلة CRM الجديدة</label><select id="bulk-stage"><option value="">بدون تغيير</option>${stageOptions}</select></div>${assignmentField}<div class="bulk-actions"><button class="btn primary" type="button" data-action="bulk-update">تطبيق على المحدد</button><button class="btn" type="button" data-action="clear-customer-selection">إلغاء التحديد</button></div></div>` : ''}</div>`;
 }
 
 function customerTableMarkup(response, members) {
   const headers = { name: 'العميل', phone: 'الهاتف', plan: 'الباقة', subscription_status: 'حالة الاشتراك', registered_at: 'تاريخ التسجيل', crm_stage: 'مرحلة CRM', assigned_to: 'مسؤول CRM' };
+  const canSelect = canEditCustomers();
   const sortableHeaders = Object.entries(headers).map(([key, label]) => `<th><button class="table-sort" type="button" data-sort="${key}">${label}${state.filters.sort === key ? (state.filters.direction === 'asc' ? ' ↑' : ' ↓') : ''}</button></th>`).join('');
-  const rows = response.data.length ? response.data.map((customer) => customerRowMarkup(customer, members)).join('') : '<tr><td colspan="8"><div class="empty">لا توجد نتائج مطابقة. جرّب تغيير الفلاتر.</div></td></tr>';
-  return `<div class="table-wrap"><table><thead><tr><th rowspan="2">تحديد</th><th class="platform-table-group" colspan="5">بيانات المنصة</th><th class="crm-table-group" colspan="2">تصنيفات CRM</th></tr><tr>${sortableHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="pagination"><span>صفحة ${response.page} · ${response.total} عميل</span><span><button class="btn small" data-action="previous" ${state.page <= 1 ? 'disabled' : ''}>السابق</button> <button class="btn small" data-action="next" ${state.page * response.per_page >= response.total ? 'disabled' : ''}>التالي</button></span></div>`;
+  const activeFilterCount = ['q', 'subscription_status', 'payment_status', 'plan', 'stage', 'assigned_to', 'lead_source', 'campaign', 'tag'].filter((key) => String(state.filters[key] || '').trim()).length;
+  const hasActiveFilters = activeFilterCount > 0;
+  const emptyTitle = hasActiveFilters ? 'لا توجد نتائج تطابق الفلاتر الحالية' : 'لم تضف أي عملاء بعد';
+  const emptyDescription = hasActiveFilters ? 'جرّب تغيير البحث أو مسح الفلاتر للعودة إلى القائمة.' : 'أضف أول عميل لبدء تنظيم المتابعة.';
+  const rows = response.data.length ? response.data.map((customer) => customerRowMarkup(customer, members)).join('') : `<tr class="customer-empty-row"><td colspan="${canSelect ? 8 : 7}"><div class="empty customer-empty-state"><strong>${emptyTitle}</strong><p>${emptyDescription}</p>${hasActiveFilters ? '<button class="btn" type="button" data-action="clear-filters">مسح الفلاتر</button>' : canEditCustomers() ? '<button class="btn primary" type="button" data-action="new-customer">إضافة عميل</button>' : ''}</div></td></tr>`;
+  const firstResult = response.total ? (response.page - 1) * response.per_page + 1 : 0;
+  const lastResult = Math.min(response.page * response.per_page, response.total);
+  return `<div class="table-wrap customer-table-wrap"><table class="customer-table"><thead><tr>${canSelect ? '<th rowspan="2">تحديد</th>' : ''}<th class="platform-table-group" colspan="5">بيانات المنصة</th><th class="crm-table-group" colspan="2">تصنيفات CRM</th></tr><tr>${sortableHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="pagination customer-pagination"><span>${response.total ? `عرض ${firstResult}–${lastResult} من ${customerCountLabel(response.total)}` : 'لا توجد سجلات'}</span><span><button class="btn small" data-action="previous" ${state.page <= 1 ? 'disabled' : ''}>السابق</button><button class="btn small" data-action="next" ${state.page * response.per_page >= response.total ? 'disabled' : ''}>التالي</button></span></div>`;
+}
+
+function customerCountLabel(count) {
+  if (count === 0) return 'لا يوجد عملاء';
+  if (count === 1) return 'عميل واحد';
+  if (count === 2) return 'عميلان';
+  return `${count} عملاء`;
 }
 
 function customerRowMarkup(customer, members) {
   const owner = members.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين';
   const checked = state.selectedCustomers.has(Number(customer.id)) ? 'checked' : '';
-  return `<tr><td data-label="تحديد"><input type="checkbox" class="customer-select" value="${customer.id}" ${checked} aria-label="تحديد ${escapeHtml(customer.name)}"></td><td data-label="العميل · المنصة"><a class="table-person" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></span></a></td><td data-label="الهاتف · المنصة">${escapeHtml(customer.phone || '—')}</td><td data-label="الباقة · المنصة">${escapeHtml(customer.plan || '—')}</td><td data-label="الاشتراك · المنصة">${badge(customer.subscription_status)}</td><td data-label="تاريخ التسجيل · المنصة">${dateLabel(customer.registered_at)}</td><td data-label="مرحلة CRM">${badge(customer.crm_stage)}</td><td data-label="مسؤول CRM">${escapeHtml(owner)}</td></tr>`;
+  const selectionCell = canEditCustomers() ? `<td class="customer-select-cell" data-label="تحديد"><input type="checkbox" class="customer-select" value="${customer.id}" ${checked} aria-label="تحديد ${escapeHtml(customer.name)}"></td>` : '';
+  return `<tr class="customer-table-row">${selectionCell}<td class="customer-name-cell" data-label="العميل · المنصة"><a class="table-person" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><span><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></span></a></td><td data-label="الهاتف · المنصة">${escapeHtml(customer.phone || '—')}</td><td data-label="الباقة · المنصة">${escapeHtml(customer.plan || '—')}</td><td data-label="الاشتراك · المنصة">${badge(customer.subscription_status)}</td><td data-label="تاريخ التسجيل · المنصة">${dateLabel(customer.registered_at)}</td><td data-label="مرحلة CRM">${badge(customer.crm_stage)}</td><td data-label="مسؤول CRM">${escapeHtml(owner)}</td></tr>`;
 }
 
 function bindCustomerList(list) {
   const views = savedViews();
+  const filterDetails = document.querySelector('.customer-filter-details');
+  if (filterDetails) {
+    const hasAdvancedFilters = ['subscription_status', 'payment_status', 'plan', 'stage', 'assigned_to', 'lead_source', 'campaign', 'tag'].some((key) => String(state.filters[key] || '').trim());
+    filterDetails.open = !window.matchMedia('(max-width: 850px)').matches || hasAdvancedFilters;
+  }
   document.querySelector('#filters').addEventListener('submit', (event) => {
     event.preventDefault(); state.filters = Object.fromEntries(new FormData(event.currentTarget));
     state.selectedView = ''; state.selectedCustomers.clear(); state.page = 1; render();
@@ -484,10 +510,19 @@ function bindCustomerList(list) {
   document.querySelector('#saved-view').addEventListener('change', (event) => applySavedView(event.currentTarget.value, views));
   document.querySelectorAll('[data-sort]').forEach((button) => button.addEventListener('click', () => sortCustomers(button.dataset.sort)));
   document.querySelectorAll('.customer-select').forEach((input) => input.addEventListener('change', () => toggleCustomerSelection(input)));
-  document.querySelector('#select-visible-customers')?.addEventListener('change', (event) => togglePageSelection(list.response.data, event.currentTarget.checked));
+  const selectVisible = document.querySelector('#select-visible-customers');
+  if (selectVisible) {
+    const selectedOnPage = list.response.data.filter((customer) => state.selectedCustomers.has(Number(customer.id))).length;
+    selectVisible.indeterminate = selectedOnPage > 0 && selectedOnPage < list.response.data.length;
+    selectVisible.addEventListener('change', (event) => togglePageSelection(list.response.data, event.currentTarget.checked));
+  }
 }
 
 function applySavedView(name, views) {
+  if (!name) {
+    state.filters = {}; state.selectedView = ''; state.selectedCustomers.clear(); state.page = 1; render();
+    return;
+  }
   state.selectedView = name;
   const view = views.find((savedView) => savedView.name === name);
   if (!view) return;
@@ -836,6 +871,7 @@ async function runAction(button) {
     if (button.dataset.action === 'rename-view') return renameCurrentView();
     if (button.dataset.action === 'delete-view') return deleteCurrentView();
     if (button.dataset.action === 'bulk-update') return bulkUpdateCustomers();
+    if (button.dataset.action === 'clear-customer-selection') { state.selectedCustomers.clear(); return render(); }
     if (button.dataset.action === 'logout') {
       const subscription = await serviceWorkerRegistration?.pushManager.getSubscription();
       await request('/api/auth/logout', { method: 'POST', body: JSON.stringify({ push_endpoint: subscription?.endpoint || null }) });
