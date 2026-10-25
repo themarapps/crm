@@ -49,7 +49,7 @@ if ($method === 'GET' && $path === '/service-worker.js' && is_file(__DIR__ . $pa
     readfile(__DIR__ . $path);
     exit;
 }
-if ($method === 'GET' && $path === '/manifest.webmanifest' && is_file(__DIR__ . $path)) {
+if ($method === 'GET' && $path === '/manifest.json' && is_file(__DIR__ . $path)) {
     header('Content-Type: application/manifest+json; charset=utf-8');
     header('Cache-Control: no-cache');
     readfile(__DIR__ . $path);

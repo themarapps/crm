@@ -1,7 +1,7 @@
 const CACHE_NAME = 'crm-pwa-shell-v1';
 const APP_SHELL = [
   '/',
-  '/manifest.webmanifest',
+  '/manifest.json',
   '/icons/crm-icon.png',
   '/icons/crm-icon-512.png',
   '/assets/app.css?v=crm-pwa-20261026',
@@ -24,7 +24,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(request).catch(() => caches.match('/')));
     return;
   }
-  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest') {
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json') {
     event.respondWith(caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(request);
       const refresh = fetch(request).then((response) => {
