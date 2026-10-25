@@ -539,9 +539,9 @@ function customerProfileMarkup(customer, response) {
     detailField('حالة الدفع · المنصة', customer.payment_status),
     detailField('دورة الفوترة', customer.billing_cycle),
     detailField('مرحلة الحساب · المنصة', customer.source_stage),
-    detailField('البريد مؤكد · المنصة', customer.email_verified),
+    detailField('البريد مؤكد · المنصة', platformVerificationLabel(customer.email_verified)),
     detailField('الشركة', customer.company_url),
-    detailField('الخدمات', customer.services),
+    detailField('الخدمات', platformServicesLabel(customer.services)),
     detailField('عدد الخدمات', customer.service_count),
     detailField('آخر مبلغ', [customer.last_amount, customer.currency].filter(Boolean).join(' ')),
     detailField('تاريخ التسجيل', dateTimeLabel(customer.registered_at)),
@@ -559,10 +559,29 @@ function detailField(title, fieldContent) {
   return `<div class="detail-field"><small>${title}</small><strong>${escapeHtml(fieldContent || '—')}</strong></div>`;
 }
 
+function platformVerificationLabel(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const normalizedValue = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'verified'].includes(normalizedValue)) return 'مؤكد';
+  if (['0', 'false', 'no', 'unverified'].includes(normalizedValue)) return 'غير مؤكد';
+  return value;
+}
+
+function platformServicesLabel(value) {
+  if (!value) return '—';
+  try {
+    const parsedServices = JSON.parse(value);
+    if (Array.isArray(parsedServices)) return parsedServices.map((service) => typeof service === 'string' ? service : JSON.stringify(service)).filter(Boolean).join('، ') || '—';
+  } catch {
+    return value;
+  }
+  return value;
+}
+
 function customerStageField(customer) {
-  if (!canEditCustomers()) return detailField('حالة العميل', labels[customer.crm_stage] || customer.crm_stage);
+  if (!canEditCustomers()) return detailField('مرحلة CRM', labels[customer.crm_stage] || customer.crm_stage);
   const options = selectOptions(customerStages.map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new');
-  return `<div class="detail-field"><small>حالة العميل</small><div class="detail-stage-control"><select id="customer-stage" aria-label="حالة العميل">${options}</select><button class="btn small" id="save-customer-stage" type="button" disabled>حفظ</button></div><span class="muted customer-stage-feedback" id="customer-stage-feedback" aria-live="polite"></span></div>`;
+  return `<div class="detail-field"><small>مرحلة CRM</small><div class="detail-stage-control"><select id="customer-stage" aria-label="مرحلة CRM">${options}</select><button class="btn small" id="save-customer-stage" type="button" disabled>حفظ</button></div><span class="muted customer-stage-feedback" id="customer-stage-feedback" aria-live="polite"></span></div>`;
 }
 
 function bindCustomerStage(customerId, currentStage) {
@@ -593,7 +612,7 @@ async function saveCustomerStage(customerId, currentStage) {
     return;
   }
   await renderCustomer(customerId);
-  document.querySelector('#customer-stage-feedback').textContent = 'تم تحديث حالة العميل.';
+  document.querySelector('#customer-stage-feedback').textContent = 'تم تحديث مرحلة CRM.';
 }
 
 function taskCard(task) {
