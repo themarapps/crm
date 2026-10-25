@@ -542,6 +542,8 @@ th {
   padding:12px 15px;
   border-bottom:1px solid var(--line)
 }
+.platform-table-group { background:#eaf0f8;color:#3d5877;text-align:center }
+.crm-table-group { background:#f4eaf4;color:var(--primary);text-align:center }
 td {
   padding:13px 15px;
   border-bottom:1px solid #e8edf6;
@@ -1179,9 +1181,14 @@ td::before {
 .filter-heading h2 { margin:0;color:#0b1c30;font-size:16px }
 .filter-heading p { margin:4px 0 0;color:var(--muted);font-size:12px }
 .filter-count { display:inline-flex;align-items:center;min-height:29px;padding:5px 10px;border-radius:999px;background:var(--surface-low);color:var(--primary);font-size:11px;font-weight:650;white-space:nowrap }
-.customer-filter-fields { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 12px }
+.customer-filter-groups { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px }
+.customer-filter-group { min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fbfcff }
+.customer-filter-group h3 { margin:0 0 12px;color:#24364d;font-size:13px }
+.platform-filter-group { border-top:3px solid #607b9f }
+.crm-filter-group { border-top:3px solid var(--primary) }
+.customer-filter-fields { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px }
 .customer-filter-fields .field { min-width:0 }
-.customer-filter-fields .filter-search-field { grid-column:span 2 }
+.filter-search-field input { min-height:44px;border-color:#c8d0df;border-radius:10px }
 .customer-filter-fields .field input,.customer-filter-fields .field select,.filter-sort-fields .field select,.saved-view-select select { min-height:44px;border-color:#c8d0df;border-radius:10px }
 .filter-footer { display:flex;align-items:end;justify-content:space-between;gap:18px;padding-top:16px;border-top:1px solid #edf0f6 }
 .filter-sort-fields { display:grid;grid-template-columns:repeat(2,minmax(150px,200px));gap:12px;flex:1 }
@@ -1260,8 +1267,8 @@ td::before {
   .filter-heading { align-items:flex-start }
   .filter-heading h2 { font-size:15px }
   .filter-heading p { font-size:11px }
+  .customer-filter-groups { grid-template-columns:minmax(0,1fr);gap:11px }
   .customer-filter-fields { grid-template-columns:minmax(0,1fr);gap:11px }
-  .customer-filter-fields .filter-search-field { grid-column:auto }
   .customer-filter-fields .field label,.filter-sort-fields .field label { font-size:11px }
   .customer-filter-fields .field input,.customer-filter-fields .field select,.filter-sort-fields .field select { min-height:42px;font-size:12px }
   .filter-footer { gap:14px;padding-top:14px }
