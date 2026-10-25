@@ -150,9 +150,11 @@ function dateLabel(dateText) {
 function dateTimeLabel(dateText) {
   if (!dateText) return 'وقت التسجيل غير متوفر';
   const hasTime = /\d{1,2}:\d{2}/.test(dateText);
-  const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(dateText);
+  const normalized = dateText.includes('T') ? dateText : dateText.replace(' ', 'T');
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
   if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
-  const options = { dateStyle: 'medium', timeZone: 'Asia/Riyadh' };
+  const options = { dateStyle: 'medium', timeZone: hasTimezone ? 'Asia/Riyadh' : 'UTC' };
   if (hasTime) options.timeStyle = 'short';
   const formatted = new Intl.DateTimeFormat('ar-SA', options).format(date);
   return hasTime ? `تاريخ ووقت التسجيل: ${formatted}` : `تاريخ التسجيل: ${formatted} · الوقت غير متوفر`;
