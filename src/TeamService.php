@@ -75,7 +75,7 @@ final class TeamService
     private static function validatedRole(array $requestFields): string
     {
         $role = $requestFields['role'] ?? 'member';
-        if (!is_string($role) || !in_array($role, ['admin', 'member'], true)) {
+        if (!is_string($role) || !in_array($role, ['admin', 'manager', 'member'], true)) {
             Http::json(['error' => 'validation_error', 'fields' => ['role' => 'الدور غير صالح.']], 422);
         }
         return $role;

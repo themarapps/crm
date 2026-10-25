@@ -3,11 +3,12 @@ const state = { user: null, csrf: '', team: [], filters: {}, page: 1, currentCus
 const labels = {
   new: 'جديد', contacted: 'تم التواصل', interested: 'مهتم', not_interested: 'غير مهتم',
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
-  open: 'مفتوحة', done: 'مكتملة', admin: 'مسؤول', member: 'عضو فريق',
+  open: 'مفتوحة', done: 'مكتملة', admin: 'مسؤول', manager: 'مدير', member: 'عضو فريق',
 };
 const routes = [
   ['dashboard', '/', 'الرئيسية', 'home'], ['customers', '/customers', 'العملاء', 'customers'],
-  ['tasks', '/tasks', 'المهام', 'tasks'], ['import', '/import', 'استيراد', 'import'], ['team', '/team', 'الفريق', 'team'],
+  ['tasks', '/tasks', 'المهام', 'tasks'], ['reports', '/reports', 'التقارير', 'reports'],
+  ['import', '/import', 'استيراد', 'import'], ['team', '/team', 'الفريق', 'team'],
 ];
 const icons = {
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -15,6 +16,7 @@ const icons = {
   tasks: '<path d="m5 12 4 4L19 6"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/>',
   import: '<path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
   team: '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20a6 6 0 0 1 12 0M15 16a5 5 0 0 1 6 4"/>',
+  reports: '<path d="M4 19V5m0 14h16"/><path d="M8 15v-4m4 4V7m4 8v-6m4 6V4"/>',
   logout: '<path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/>',
 };
 
@@ -94,8 +96,9 @@ async function submitLogin(event) {
 }
 
 function shell(content, activeKey, title) {
-  const navigation = routes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
-  const mobile = routes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
+  const visibleRoutes = routes.filter(([key]) => !((key === 'team' && state.user.role !== 'admin') || (['import', 'reports'].includes(key) && state.user.role === 'member')));
+  const navigation = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}<span class="nav-label">${label}</span></a>`).join('');
+  const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
   return `<div class="shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">CRM</span><span class="brand-text">إدارة العملاء</span></div><nav class="nav">${navigation}</nav><div class="side-bottom"><button class="side-action" data-action="logout">${icon('logout')}<span class="side-label">تسجيل الخروج</span></button><div class="user-mini"><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div></div></div></aside>
   <section class="main"><header class="topbar"><div class="top-title">${title}</div><div class="top-actions"><button class="btn primary desktop-action" data-action="new-customer">+ عميل جديد</button><span class="avatar">${escapeHtml((state.user.name || 'م').slice(0, 1))}</span></div></header><main class="content">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
 }
@@ -131,8 +134,9 @@ async function render() {
     if (route[0] === 'customers' && route[1]) return await renderCustomer(route[1]);
     if (route[0] === 'customers') return await renderCustomers();
     if (route[0] === 'tasks') return await renderTasks();
-    if (route[0] === 'import') return renderImport();
-    if (route[0] === 'team') return await renderTeam();
+    if (route[0] === 'reports' && state.user.role !== 'member') return await renderReports();
+    if (route[0] === 'import' && state.user.role !== 'member') return renderImport();
+    if (route[0] === 'team' && state.user.role === 'admin') return await renderTeam();
     location.hash = '#/dashboard';
   } catch (error) { showError(error); }
 }
@@ -140,9 +144,10 @@ async function render() {
 async function renderDashboard() {
   const [dashboard, customers] = await Promise.all([request('/api/dashboard'), request('/api/customers?per_page=6')]);
   const counts = dashboard.counts;
+  const overdueRows = dashboard.overdue_tasks.length ? dashboard.overdue_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div><a class="btn small" href="#/customers/${task.customer_id}">فتح العميل</a></div>`).join('') : '';
   const taskRows = dashboard.upcoming_tasks.length ? dashboard.upcoming_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><div class="person"><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div></div><a class="btn small" href="#/customers/${task.customer_id}">العميل</a></div>`).join('') : '<div class="empty">لا توجد متابعات قادمة.</div>';
   const customerRows = customers.data.length ? customers.data.map(customerRow).join('') : '<div class="empty">أضف أول عميل لبدء المتابعة.</div>';
-  app.innerHTML = shell(`${pageHead('الرئيسية', 'ملخص سريع للعملاء والمهام اليومية.')}
+  app.innerHTML = shell(`${pageHead('الرئيسية', 'ملخص سريع للعملاء والمهام اليومية.')}${overdueRows ? `<section class="panel overdue-panel"><div class="panel-head"><h2>متابعات تحتاج إجراء</h2><span class="badge danger">${counts.overdue_tasks} متأخرة</span></div><div class="panel-body">${overdueRows}</div></section>` : ''}
     <div class="stats">${statCard('إجمالي العملاء', counts.customers)}${statCard('اشتراكات نشطة', counts.active_subscriptions)}${statCard('عملاء جدد', counts.new_customers)}${statCard('متابعات متأخرة', counts.overdue_tasks, counts.today_tasks ? `${counts.today_tasks} متابعة اليوم` : '')}</div>
     <div class="grid-two"><section class="panel"><div class="panel-head"><h2>المتابعات القادمة</h2><a class="btn small" href="#/tasks">كل المهام</a></div><div class="panel-body">${taskRows}</div></section><section class="panel"><div class="panel-head"><h2>أحدث العملاء</h2><a class="btn small" href="#/customers">عرض الكل</a></div><div class="panel-body">${customerRows}</div></section></div>`, 'dashboard', 'نظرة عامة');
   bindShell();
@@ -150,6 +155,13 @@ async function renderDashboard() {
 
 function customerRow(customer) {
   return `<a class="customer-row" href="#/customers/${customer.id}" style="color:inherit;text-decoration:none"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><strong>${escapeHtml(customer.name)}</strong><small>${escapeHtml(customer.email)}</small></div></div>${badge(customer.subscription_status)}</a>`;
+}
+
+async function renderReports() {
+  const report = await request('/api/reports/summary');
+  const reportGroup = (title, rows) => `<section class="panel"><div class="panel-head"><h2>${title}</h2></div><div class="panel-body report-list">${rows.length ? rows.map((row) => `<div class="report-row"><span>${escapeHtml(labels[row.label] || row.label || 'غير محدد')}</span><strong>${escapeHtml(row.total)}</strong></div>`).join('') : '<div class="empty">لا توجد بيانات بعد.</div>'}</div></section>`;
+  app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div>`, 'reports', 'التقارير');
+  bindShell();
 }
 
 async function renderCustomers() {
@@ -162,7 +174,8 @@ async function renderCustomers() {
   const statusOptions = options.subscription_statuses.map((status) => `<option value="${escapeHtml(status)}" ${state.filters.subscription_status === status ? 'selected' : ''}>${escapeHtml(labels[status] || status)}</option>`).join('');
   const stageOptions = options.stages.map((stage) => `<option value="${escapeHtml(stage)}" ${state.filters.stage === stage ? 'selected' : ''}>${escapeHtml(labels[stage] || stage)}</option>`).join('');
   const assigneeOptions = team.data.map((member) => `<option value="${member.id}" ${state.filters.assigned_to === String(member.id) ? 'selected' : ''}>${escapeHtml(member.name)}</option>`).join('');
-  app.innerHTML = shell(`${pageHead('العملاء', `إجمالي ${response.total} عميل`, '<button class="btn primary" data-action="new-customer">+ إضافة عميل</button>')}
+  const exportLink = ['admin', 'manager'].includes(state.user.role) ? `<a class="btn" href="/api/customers/export.csv?${params.toString()}">تصدير CSV</a>` : '';
+  app.innerHTML = shell(`${pageHead('العملاء', `إجمالي ${response.total} عميل`, `${exportLink}<button class="btn primary" data-action="new-customer">+ إضافة عميل</button>`)}
     <section class="panel"><form class="toolbar" id="filters"><div class="field search-field"><label for="filter-q">بحث</label><input class="search" id="filter-q" name="q" value="${escapeHtml(state.filters.q || '')}" placeholder="الاسم أو البريد أو الهاتف"></div><div class="field"><label>الاشتراك</label><select name="subscription_status"><option value="">كل الحالات</option>${statusOptions}</select></div><div class="field"><label>الباقة</label><select name="plan"><option value="">كل الباقات</option>${planOptions}</select></div><div class="field"><label>مرحلة المتابعة</label><select name="stage"><option value="">كل المراحل</option>${stageOptions}</select></div><div class="field"><label>المسؤول</label><select name="assigned_to"><option value="">كل الفريق</option>${assigneeOptions}</select></div><button class="btn" type="submit">تطبيق</button><button class="btn" type="button" data-action="clear-filters">مسح</button></form>
     <div class="table-wrap"><table><thead><tr><th>العميل</th><th>الهاتف</th><th>الباقة</th><th>الاشتراك</th><th>مرحلة المتابعة</th><th>المسؤول</th><th>تاريخ التسجيل</th></tr></thead><tbody>${rows}</tbody></table></div><div class="pagination"><span>صفحة ${response.page} · ${response.total} عميل</span><span><button class="btn small" data-action="previous" ${state.page <= 1 ? 'disabled' : ''}>السابق</button> <button class="btn small" data-action="next" ${state.page * response.per_page >= response.total ? 'disabled' : ''}>التالي</button></span></div></section>`, 'customers', 'العملاء');
   bindShell();
@@ -176,9 +189,10 @@ async function renderCustomer(customerId) {
   state.currentCustomer = customer;
   const notes = response.notes.length ? response.notes.map((note) => `<div class="task-row"><div><strong>${escapeHtml(note.author)}</strong><p>${escapeHtml(note.body)}</p><small class="muted">${dateLabel(note.created_at)}</small></div></div>`).join('') : '<div class="empty">لا توجد ملاحظات بعد.</div>';
   const tasks = response.tasks.length ? response.tasks.map(taskCard).join('') : '<div class="empty">لا توجد مهام للعميل.</div>';
+  const activity = response.activity.length ? response.activity.map((entry) => `<div class="task-row"><div><strong>${escapeHtml(entry.summary)}</strong><small>${escapeHtml(entry.actor_name || 'النظام')} · ${dateLabel(entry.created_at)}</small></div></div>`).join('') : '<div class="empty">سيظهر هنا سجل تحديثات العميل ومتابعاته.</div>';
   app.innerHTML = shell(`${pageHead('ملف العميل', `تمت الإضافة ${dateLabel(customer.registered_at)}`, `<button class="btn" data-action="edit-customer">تعديل البيانات</button>`)}
     <section class="panel"><div class="detail-hero"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><h2>${escapeHtml(customer.name)}</h2><p>${escapeHtml(customer.email)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p></div></div>${badge(customer.subscription_status)}</div><div class="panel-body detail-grid">${detailField('الباقة', customer.plan)}${detailField('دورة الفوترة', customer.billing_cycle)}${detailField('حالة الدفع', customer.payment_status)}${detailField('مرحلة المتابعة', labels[customer.crm_stage] || customer.crm_stage)}${detailField('المسؤول', state.team.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}${detailField('الشركة', customer.company_url)}${detailField('الخدمات', customer.services)}${detailField('تاريخ التسجيل', dateLabel(customer.registered_at))}</div></section>
-    <div class="content-grid"><div><section class="panel"><div class="panel-head"><h2>الملاحظات</h2></div><div class="panel-body"><form id="note-form"><div class="field"><label for="note-body">ملاحظة جديدة</label><textarea id="note-body" name="body" required maxlength="10000" placeholder="اكتب ملخص المكالمة أو أي معلومة مهمة"></textarea></div><button class="btn primary" style="margin-top:10px" type="submit">حفظ الملاحظة</button><div data-error></div></form>${notes}</div></section></div><div><section class="panel"><div class="panel-head"><h2>المهام</h2><button class="btn small" data-action="new-task">+ مهمة</button></div><div class="panel-body">${tasks}</div></section></div></div>`, 'customers', 'ملف العميل');
+    <div class="content-grid"><div><section class="panel"><div class="panel-head"><h2>الملاحظات</h2></div><div class="panel-body"><form id="note-form"><div class="field"><label for="note-body">ملاحظة جديدة</label><textarea id="note-body" name="body" required maxlength="10000" placeholder="اكتب ملخص المكالمة أو أي معلومة مهمة"></textarea></div><button class="btn primary" style="margin-top:10px" type="submit">حفظ الملاحظة</button><div data-error></div></form>${notes}</div></section></div><div><section class="panel"><div class="panel-head"><h2>المهام</h2><button class="btn small" data-action="new-task">+ مهمة</button></div><div class="panel-body">${tasks}</div></section></div></div><section class="panel activity-panel"><div class="panel-head"><h2>سجل نشاط العميل</h2></div><div class="panel-body">${activity}</div></section>`, 'customers', 'ملف العميل');
   bindShell();
   document.querySelector('#note-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -365,7 +379,19 @@ async function completeTask(taskId) {
 
 function memberDialog(member = null) {
   if (state.user.role !== 'admin') return;
-  const dialog = openDialog(member ? 'تعديل عضو الفريق' : 'إضافة عضو للفريق', `<form id="member-form"><div class="form-grid"><div class="field"><label>الاسم</label><input name="name" value="${escapeHtml(member?.name || '')}" required maxlength="120"></div><div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" value="${escapeHtml(member?.email || '')}" required></div><div class="field"><label>كلمة المرور ${member ? '(اختياري)' : ''}</label><input name="password" type="password" minlength="8" ${member ? '' : 'required'}><small class="muted">8 أحرف على الأقل</small></div><div class="field"><label>الصلاحية</label><select name="role"><option value="member" ${member?.role !== 'admin' ? 'selected' : ''}>عضو فريق</option><option value="admin" ${member?.role === 'admin' ? 'selected' : ''}>مسؤول</option></select></div>${member ? `<div class="field"><label>الحالة</label><select name="is_active"><option value="1" ${member.is_active ? 'selected' : ''}>نشط</option><option value="0" ${!member.is_active ? 'selected' : ''}>موقوف</option></select></div>` : ''}</div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ</button></div></form>`);
+  const roles = [
+    ['member', 'عضو فريق'], ['manager', 'مدير'], ['admin', 'مسؤول'],
+  ];
+  const roleOptions = roles.map(([value, label]) => `<option value="${value}" ${member?.role === value || (!member && value === 'member') ? 'selected' : ''}>${label}</option>`).join('');
+  const roleHelp = '<small class="muted">عضو الفريق يتابع العملاء المسندة إليه. المدير يدير العملاء والمهام والتقارير والاستيراد والتصدير. المسؤول يدير المستخدمين وكل العملاء.</small>';
+  const dialog = openDialog(member ? 'تعديل عضو الفريق' : 'إضافة عضو للفريق', `
+    <form id="member-form"><div class="form-grid">
+      <div class="field"><label>الاسم</label><input name="name" value="${escapeHtml(member?.name || '')}" required maxlength="120"></div>
+      <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" value="${escapeHtml(member?.email || '')}" required></div>
+      <div class="field"><label>كلمة المرور ${member ? '(اختياري)' : ''}</label><input name="password" type="password" minlength="8" ${member ? '' : 'required'}><small class="muted">8 أحرف على الأقل</small></div>
+      <div class="field"><label>الصلاحية</label><select name="role">${roleOptions}</select>${roleHelp}</div>
+      ${member ? `<div class="field"><label>الحالة</label><select name="is_active"><option value="1" ${member.is_active ? 'selected' : ''}>نشط</option><option value="0" ${!member.is_active ? 'selected' : ''}>موقوف</option></select></div>` : ''}
+    </div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ</button></div></form>`);
   dialog.querySelector('#member-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const fields = Object.fromEntries(new FormData(event.currentTarget));

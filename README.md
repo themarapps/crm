@@ -42,13 +42,15 @@ token returned by `GET /api/csrf` in the `X-CSRF-Token` header.
 - `POST /api/auth/login` — `{ "email": "...", "password": "..." }`
 - `POST /api/auth/logout`
 - `GET /api/me`
-- `GET /api/dashboard`
+- `GET /api/dashboard` — counts and upcoming/overdue follow-ups scoped to the signed-in member
+- `GET /api/reports/summary` — customer totals grouped by stage, subscription status, and plan (manager/admin)
 - `GET|POST /api/customers`
+- `GET /api/customers/export.csv` — exports matching filters (manager/admin; maximum 10,000 rows)
 - `GET /api/customers/options` — distinct filter options from saved customers
 - `GET|PUT /api/customers/{id}`
 - `GET|POST /api/customers/{id}/notes`
 - `GET|POST /api/tasks`, `PUT /api/tasks/{id}`
-- `GET|POST /api/team`, `PUT /api/team/{id}` (administrator only)
+- `GET|POST /api/team`, `PUT /api/team/{id}` (team changes require an administrator)
 - `POST /api/import/csv/preview` — checks rows and estimates inserts, updates, and skips without writing
 - `POST /api/import/csv` — imports the reviewed file
 
@@ -70,6 +72,10 @@ and upcoming tasks are returned by `/api/dashboard`.
 
 Customer list filters: `q`, `subscription_status`, `plan`, `stage`, `assigned_to`,
 `page`, `per_page`. Task list filters: `status`, `due` (`today`, `overdue`, `upcoming`).
+Roles are `admin` (full access and team management), `manager` (all customer, task,
+report, import, and export access), and `member` (customers assigned to them and
+their related follow-ups). Customer notes, edits, tasks, and CSV imports are recorded
+in the customer activity history.
 
 CSV rows are matched by normalized email. The interface previews a file before
 the user confirms the import. Arabic headers from the supplied export

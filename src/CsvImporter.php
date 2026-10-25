@@ -32,10 +32,10 @@ final class CsvImporter
         'error_count' => 'error_count',
     ];
 
-    public static function import(PDO $db, array $uploadedFile): never
+    public static function import(PDO $db, array $uploadedFile, int $actorId): never
     {
         $csvRows = self::readUploadedCsv($uploadedFile);
-        $importReport = self::importRows($db, $csvRows);
+        $importReport = self::importRows($db, $csvRows, $actorId);
         Http::json($importReport);
     }
 
@@ -162,14 +162,14 @@ final class CsvImporter
         return substr($phone, 1);
     }
 
-    private static function importRows(PDO $db, array $csvRows): array
+    private static function importRows(PDO $db, array $csvRows, int $actorId): array
     {
         $emailCounts = self::emailCounts($csvRows);
         $importReport = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
         $db->beginTransaction();
         try {
             foreach ($csvRows as $csvRow) {
-                $rowOutcome = self::importRow($db, $csvRow, $emailCounts);
+                $rowOutcome = self::importRow($db, $csvRow, $emailCounts, $actorId);
                 $importReport = self::recordOutcome($importReport, $rowOutcome);
             }
             $db->commit();
@@ -217,13 +217,14 @@ final class CsvImporter
         return $counts;
     }
 
-    private static function importRow(PDO $db, array $csvRow, array $emailCounts): array
+    private static function importRow(PDO $db, array $csvRow, array $emailCounts, int $actorId): array
     {
         $outcome = self::classifyRow($db, $csvRow, $emailCounts);
         if ($outcome['status'] === 'skipped') {
             return $outcome;
         }
-        self::persistImportedCustomer($db, self::customerFields($csvRow), $outcome['customer_id']);
+        $customerId = self::persistImportedCustomer($db, self::customerFields($csvRow), $outcome['customer_id']);
+        ActivityLog::record($db, $customerId, $actorId, $outcome['status'] === 'created' ? 'created' : 'imported', $outcome['status'] === 'created' ? 'تمت إضافة العميل عبر استيراد CSV.' : 'تم تحديث بيانات العميل عبر استيراد CSV.');
         return $outcome;
     }
 
@@ -282,16 +283,16 @@ final class CsvImporter
         return $fieldValue;
     }
 
-    private static function persistImportedCustomer(PDO $db, array $customerFields, ?int $existingCustomerId): void
+    private static function persistImportedCustomer(PDO $db, array $customerFields, ?int $existingCustomerId): int
     {
         if ($existingCustomerId === null) {
-            self::insertImportedCustomer($db, $customerFields);
-            return;
+            return self::insertImportedCustomer($db, $customerFields);
         }
         self::updateImportedCustomer($db, $customerFields, $existingCustomerId);
+        return $existingCustomerId;
     }
 
-    private static function insertImportedCustomer(PDO $db, array $customerFields): void
+    private static function insertImportedCustomer(PDO $db, array $customerFields): int
     {
         $now = gmdate('Y-m-d H:i:s');
         $columns = array_merge(self::CUSTOMER_FIELDS, ['crm_stage', 'created_at', 'updated_at']);
@@ -300,6 +301,7 @@ final class CsvImporter
         $customerFields['updated_at'] = $now;
         $query = 'INSERT INTO customers (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')';
         $db->prepare($query)->execute(array_map(fn($field) => $customerFields[$field] ?? null, $columns));
+        return (int) $db->lastInsertId();
     }
 
     private static function updateImportedCustomer(PDO $db, array $customerFields, int $customerId): void

@@ -333,6 +333,11 @@ button {
   background:#fff1f2;
   color:#9f1239
 }
+.overdue-panel { margin-bottom:18px; border-color:#fecdd3 }
+.report-list { display:grid; gap:0 }
+.report-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid var(--line) }
+.report-row:last-child { border-bottom:0 }
+.activity-panel { margin-top:18px }
 .toolbar {
   display:flex;
   gap:9px;

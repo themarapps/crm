@@ -3,9 +3,14 @@ declare(strict_types=1);
 
 final class TaskService
 {
-    public static function list(PDO $db, array $requestQuery): never
+    public static function list(PDO $db, array $requestQuery, array $user): never
     {
         $filters = self::listFilters($requestQuery);
+        if ($user['role'] === 'member') {
+            $filters['conditions'][] = '(t.assignee_id = ? OR c.assigned_to = ?)';
+            $filters['params'][] = (int) $user['id'];
+            $filters['params'][] = (int) $user['id'];
+        }
         $sql = self::listSql($filters['conditions']);
         $taskQuery = $db->prepare($sql);
         $taskQuery->execute($filters['params']);
@@ -51,13 +56,37 @@ final class TaskService
         return 'SELECT t.*, c.name AS customer_name, c.email AS customer_email, creator.name AS creator_name, assignee.name AS assignee_name FROM follow_up_tasks t JOIN customers c ON c.id = t.customer_id JOIN users creator ON creator.id = t.created_by LEFT JOIN users assignee ON assignee.id = t.assignee_id' . $where . " ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END, t.due_at ASC, t.id DESC LIMIT 500";
     }
 
-    public static function save(PDO $db, array $requestFields, int $actorId, ?int $taskId = null): never
+    public static function save(PDO $db, array $requestFields, array $user, ?int $taskId = null): never
     {
+        $actorId = (int) $user['id'];
+        if ($user['role'] === 'member') {
+            $customerId = self::optionalId($requestFields, 'customer_id');
+            if (!$customerId || !self::memberCanSaveTask($db, $customerId, $taskId, $actorId)) Http::json(['error' => 'not_found'], 404);
+            $requestFields['assignee_id'] = $actorId;
+        }
         $taskFields = self::validatedTaskFields($db, $requestFields);
         $savedTaskId = self::persistTask($db, $taskFields, $actorId, $taskId);
         $taskQuery = $db->prepare('SELECT * FROM follow_up_tasks WHERE id = ?');
         $taskQuery->execute([$savedTaskId]);
-        Http::json(['task' => $taskQuery->fetch()], $taskId === null ? 201 : 200);
+        $task = $taskQuery->fetch();
+        ActivityLog::record($db, (int) $task['customer_id'], $actorId, $taskId === null ? 'task_created' : 'task_updated', $taskId === null ? 'أُضيفت مهمة متابعة: ' . $task['title'] : 'تم تحديث مهمة متابعة: ' . $task['title']);
+        Http::json(['task' => $task], $taskId === null ? 201 : 200);
+    }
+
+    private static function memberCanAccessCustomer(PDO $db, int $customerId, int $userId): bool
+    {
+        $query = $db->prepare('SELECT 1 FROM customers WHERE id = ? AND assigned_to = ?');
+        $query->execute([$customerId, $userId]);
+        return (bool) $query->fetchColumn();
+    }
+
+    private static function memberCanSaveTask(PDO $db, int $customerId, ?int $taskId, int $userId): bool
+    {
+        if ($taskId === null) return self::memberCanAccessCustomer($db, $customerId, $userId);
+        $query = $db->prepare('SELECT t.customer_id FROM follow_up_tasks t JOIN customers c ON c.id = t.customer_id WHERE t.id = ? AND (t.assignee_id = ? OR c.assigned_to = ?)');
+        $query->execute([$taskId, $userId, $userId]);
+        $taskCustomerId = $query->fetchColumn();
+        return $taskCustomerId !== false && (int) $taskCustomerId === $customerId;
     }
 
     private static function validatedTaskFields(PDO $db, array $requestFields): array

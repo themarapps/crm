@@ -12,9 +12,9 @@ final class CustomerService
 
     private const STAGES = ['new', 'contacted', 'interested', 'not_interested'];
 
-    public static function list(PDO $db, array $requestQuery): never
+    public static function list(PDO $db, array $requestQuery, array $user): never
     {
-        [$conditions, $queryParams] = self::listConditions($requestQuery);
+        [$conditions, $queryParams] = self::listConditions($requestQuery, $user);
         $whereClause = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
         $page = max(1, (int) ($requestQuery['page'] ?? 1));
         $pageSize = min(100, max(1, (int) ($requestQuery['per_page'] ?? 25)));
@@ -28,7 +28,7 @@ final class CustomerService
         Http::json(['data' => $customers, 'page' => $page, 'per_page' => $pageSize, 'total' => $total]);
     }
 
-    private static function listConditions(array $requestQuery): array
+    private static function listConditions(array $requestQuery, array $user): array
     {
         $conditions = [];
         $queryParams = [];
@@ -36,6 +36,10 @@ final class CustomerService
         [$exactConditions, $exactParams] = self::exactConditions($requestQuery);
         $conditions = array_merge($searchConditions, $exactConditions);
         $queryParams = array_merge($searchParams, $exactParams);
+        if ($user['role'] === 'member') {
+            $conditions[] = 'assigned_to = ?';
+            $queryParams[] = (int) $user['id'];
+        }
         return [$conditions, $queryParams];
     }
 
@@ -65,19 +69,82 @@ final class CustomerService
         return [$conditions, $queryParams];
     }
 
-    public static function filterOptions(PDO $db): never
+    public static function filterOptions(PDO $db, array $user): never
     {
         Http::json([
-            'plans' => self::distinctValues($db, 'plan'),
-            'subscription_statuses' => self::distinctValues($db, 'subscription_status'),
-            'stages' => self::distinctValues($db, 'crm_stage'),
+            'plans' => self::distinctValues($db, 'plan', $user),
+            'subscription_statuses' => self::distinctValues($db, 'subscription_status', $user),
+            'stages' => self::distinctValues($db, 'crm_stage', $user),
         ]);
     }
 
-    private static function distinctValues(PDO $db, string $column): array
+    private static function distinctValues(PDO $db, string $column, array $user): array
     {
-        $query = $db->query('SELECT DISTINCT ' . $column . ' FROM customers WHERE ' . $column . ' IS NOT NULL AND ' . $column . " != '' ORDER BY " . $column . ' LIMIT 100');
+        $scope = $user['role'] === 'member' ? ' AND assigned_to = ' . (int) $user['id'] : '';
+        $query = $db->query('SELECT DISTINCT ' . $column . ' FROM customers WHERE ' . $column . ' IS NOT NULL AND ' . $column . " != ''" . $scope . ' ORDER BY ' . $column . ' LIMIT 100');
         return array_column($query->fetchAll(), $column);
+    }
+
+    public static function export(PDO $db, array $requestQuery, array $user): never
+    {
+        if (!in_array($user['role'], ['admin', 'manager'], true)) {
+            Http::json(['error' => 'forbidden', 'message' => 'لا تملك صلاحية تصدير العملاء.'], 403);
+        }
+        [$conditions, $params] = self::listConditions($requestQuery, $user);
+        $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
+        $query = $db->prepare('SELECT name, email, phone, plan, subscription_status, payment_status, crm_stage, assigned_to, registered_at FROM customers' . $where . ' ORDER BY updated_at DESC, id DESC LIMIT 10000');
+        $query->execute($params);
+        self::writeCustomerExport($query);
+        exit;
+    }
+
+    private static function writeCustomerExport(PDOStatement $query): void
+    {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="crm-customers.csv"');
+        header('Cache-Control: no-store');
+        $output = fopen('php://output', 'wb');
+        fwrite($output, "\xEF\xBB\xBF");
+        fputcsv($output, ['name', 'email', 'phone', 'plan', 'subscription_status', 'payment_status', 'crm_stage', 'assigned_to', 'registered_at']);
+        while ($customer = $query->fetch(PDO::FETCH_NUM)) {
+            foreach ($customer as &$value) {
+                if (is_string($value) && preg_match('/^[\x00-\x20]*[=+@\-]/', $value)) $value = "'" . $value;
+            }
+            unset($value);
+            fputcsv($output, $customer);
+        }
+        fclose($output);
+    }
+
+    public static function report(PDO $db, array $user): never
+    {
+        if (!in_array($user['role'], ['admin', 'manager'], true)) {
+            Http::json(['error' => 'forbidden', 'message' => 'لا تملك صلاحية عرض التقارير.'], 403);
+        }
+        Http::json([
+            'total' => self::countCustomersForReport($db),
+            'active_subscriptions' => self::countActiveForReport($db),
+            'stages' => self::groupCounts($db, 'crm_stage'),
+            'subscriptions' => self::groupCounts($db, 'subscription_status'),
+            'plans' => self::groupCounts($db, 'plan'),
+        ]);
+    }
+
+    private static function countCustomersForReport(PDO $db): int
+    {
+        return (int) $db->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+    }
+
+    private static function countActiveForReport(PDO $db): int
+    {
+        return (int) $db->query("SELECT COUNT(*) FROM customers WHERE LOWER(COALESCE(subscription_status, '')) = 'active'")->fetchColumn();
+    }
+
+    private static function groupCounts(PDO $db, string $column): array
+    {
+        $query = $db->prepare('SELECT ' . $column . ' AS label, COUNT(*) AS total FROM customers GROUP BY ' . $column . ' ORDER BY total DESC, label LIMIT 50');
+        $query->execute();
+        return $query->fetchAll();
     }
 
     private static function queryString(array $requestQuery, string $key): string
@@ -102,22 +169,24 @@ final class CustomerService
         return $customerQuery->fetchAll();
     }
 
-    public static function show(PDO $db, int $customerId): never
+    public static function show(PDO $db, int $customerId, array $user): never
     {
         $customer = self::findCustomer($db, $customerId);
-        if (!$customer) {
+        if (!$customer || !self::canAccessCustomer($customer, $user)) {
             Http::json(['error' => 'not_found'], 404);
         }
         Http::json([
             'customer' => $customer,
             'notes' => self::customerNotes($db, $customerId),
             'tasks' => self::customerTasks($db, $customerId),
+            'activity' => ActivityLog::forCustomer($db, $customerId),
         ]);
     }
 
-    public static function notes(PDO $db, int $customerId): never
+    public static function notes(PDO $db, int $customerId, array $user): never
     {
-        if (!self::customerExists($db, $customerId)) {
+        $customer = self::findCustomer($db, $customerId);
+        if (!$customer || !self::canAccessCustomer($customer, $user)) {
             Http::json(['error' => 'not_found'], 404);
         }
         Http::json(['data' => self::customerNotes($db, $customerId)]);
@@ -144,8 +213,15 @@ final class CustomerService
         return $taskQuery->fetchAll();
     }
 
-    public static function save(PDO $db, array $requestFields, ?int $customerId = null): never
+    public static function save(PDO $db, array $requestFields, array $user, ?int $customerId = null): never
     {
+        if ($user['role'] === 'member') {
+            if ($customerId !== null) {
+                $existing = self::findCustomer($db, $customerId);
+                if (!$existing || !self::canAccessCustomer($existing, $user)) Http::json(['error' => 'not_found'], 404);
+            }
+            $requestFields['assigned_to'] = (int) $user['id'];
+        }
         $customerFields = self::validatedCustomerFields($db, $requestFields);
         try {
             $savedId = self::persistCustomer($db, $customerFields, $customerId);
@@ -156,7 +232,13 @@ final class CustomerService
             throw $exception;
         }
         $savedCustomer = self::findCustomer($db, $savedId);
+        ActivityLog::record($db, $savedId, (int) $user['id'], $customerId === null ? 'created' : 'updated', $customerId === null ? 'تمت إضافة العميل.' : 'تم تحديث بيانات العميل.');
         Http::json(['customer' => $savedCustomer], $customerId === null ? 201 : 200);
+    }
+
+    private static function canAccessCustomer(array $customer, array $user): bool
+    {
+        return $user['role'] !== 'member' || (int) ($customer['assigned_to'] ?? 0) === (int) $user['id'];
     }
 
     private static function validatedCustomerFields(PDO $db, array $requestFields): array
@@ -281,17 +363,20 @@ final class CustomerService
         return in_array((string) $exception->getCode(), ['23000', '23505'], true);
     }
 
-    public static function addNote(PDO $db, int $customerId, array $requestFields, int $userId): never
+    public static function addNote(PDO $db, int $customerId, array $requestFields, array $user): never
     {
-        if (!self::customerExists($db, $customerId)) {
+        $customer = self::findCustomer($db, $customerId);
+        if (!$customer || !self::canAccessCustomer($customer, $user)) {
             Http::json(['error' => 'not_found'], 404);
         }
         $noteBody = Http::requiredString($requestFields, 'body', 10000);
         $createdAt = gmdate('Y-m-d H:i:s');
         $db->prepare('INSERT INTO crm_notes (customer_id, user_id, body, created_at) VALUES (?, ?, ?, ?)')
-            ->execute([$customerId, $userId, $noteBody, $createdAt]);
+            ->execute([$customerId, (int) $user['id'], $noteBody, $createdAt]);
+        $noteId = (int) $db->lastInsertId();
+        ActivityLog::record($db, $customerId, (int) $user['id'], 'note', 'أُضيفت ملاحظة متابعة.');
         self::markCustomerActivity($db, $customerId, $createdAt);
-        Http::json(['id' => (int) $db->lastInsertId(), 'body' => $noteBody, 'created_at' => $createdAt], 201);
+        Http::json(['id' => $noteId, 'body' => $noteBody, 'created_at' => $createdAt], 201);
     }
 
     private static function markCustomerActivity(PDO $db, int $customerId, string $activityAt): void

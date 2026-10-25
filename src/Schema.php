@@ -39,6 +39,7 @@ final class Schema
         self::createUsersTable($db, $types);
         self::createCustomersTable($db, $types);
         self::createNotesTable($db, $types);
+        self::createActivityTable($db, $types);
         self::createTasksTable($db, $types);
         self::createLoginAttemptsTable($db, $types);
     }
@@ -79,6 +80,17 @@ final class Schema
         ){$engine}");
     }
 
+    private static function createActivityTable(PDO $db, array $types): void
+    {
+        $id = $types['id']; $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
+        $indexes = $types['indexes'] ? ', INDEX customer_activity_idx (customer_id, created_at)' : '';
+        $db->exec("CREATE TABLE IF NOT EXISTS customer_activity (
+            id {$id}, customer_id BIGINT NOT NULL, user_id BIGINT NULL,
+            event_type {$text} NOT NULL, summary {$longText} NOT NULL,
+            created_at DATETIME NOT NULL{$indexes}
+        ){$engine}");
+    }
+
     private static function createTasksTable(PDO $db, array $types): void
     {
         $id = $types['id']; $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
@@ -105,6 +117,7 @@ final class Schema
         $db->exec('CREATE INDEX IF NOT EXISTS customers_stage_idx ON customers (crm_stage)');
         $db->exec('CREATE INDEX IF NOT EXISTS customers_subscription_idx ON customers (subscription_status)');
         $db->exec('CREATE INDEX IF NOT EXISTS crm_notes_customer_idx ON crm_notes (customer_id)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customer_activity_idx ON customer_activity (customer_id, created_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_customer_idx ON follow_up_tasks (customer_id)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_due_idx ON follow_up_tasks (due_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_assignee_idx ON follow_up_tasks (assignee_id)');

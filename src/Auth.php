@@ -38,6 +38,13 @@ final class Auth
         }
     }
 
+    public static function requireManager(array $user): void
+    {
+        if (!in_array($user['role'], ['admin', 'manager'], true)) {
+            Http::json(['error' => 'forbidden', 'message' => 'لا تملك صلاحية تنفيذ هذا الإجراء.'], 403);
+        }
+    }
+
     public static function login(PDO $db, array $body): never
     {
         [$email, $password] = self::credentials($body);
