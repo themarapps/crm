@@ -650,13 +650,6 @@ final class CustomerService
             ->execute([$customerId, (int) $user['id'], $noteBody, $createdAt]);
         $noteId = (int) $db->lastInsertId();
         ActivityLog::record($db, $customerId, (int) $user['id'], 'note', 'أُضيفت ملاحظة متابعة.');
-        self::markCustomerActivity($db, $customerId, $createdAt);
         Http::json(['id' => $noteId, 'body' => $noteBody, 'created_at' => $createdAt], 201);
-    }
-
-    private static function markCustomerActivity(PDO $db, int $customerId, string $activityAt): void
-    {
-        $db->prepare('UPDATE customers SET last_activity_at = ?, updated_at = ? WHERE id = ?')
-            ->execute([$activityAt, $activityAt, $customerId]);
     }
 }

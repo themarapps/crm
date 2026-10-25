@@ -1295,6 +1295,20 @@ td::before {
 .customer-profile-panel .detail-hero .avatar { width:54px;height:54px;border-radius:16px;background:#f6eaf4;color:var(--primary);font-size:20px }
 .customer-profile-panel .detail-hero h2 { margin:0;font-size:20px }
 .customer-profile-panel .detail-hero p { margin:5px 0 0;color:var(--muted);font-size:12px }
+.customer-origin-label { display:block;margin-bottom:4px;color:var(--muted);font-size:10px }
+.customer-data-sections { display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) }
+.customer-data-section { min-width:0;padding:16px }
+.customer-data-section + .customer-data-section { border-inline-start:1px solid var(--line) }
+.customer-data-section.platform-data { background:#fbfcff }
+.customer-data-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px }
+.customer-data-heading h3 { margin:0;color:#0b1c30;font-size:14px }
+.customer-data-heading p { margin:4px 0 0;color:var(--muted);font-size:11px }
+.customer-data-heading > span { flex:0 0 auto;padding:5px 8px;border-radius:999px;background:#edf2fa;color:#43516a;font-size:10px }
+.customer-data-section.crm-data .customer-data-heading > span { background:#f6eaf4;color:#4a154b }
+.customer-edit-section { width:100%;min-width:0;margin:0 0 14px;padding:15px;border:1px solid var(--line);border-radius:12px }
+.customer-edit-section legend { padding-inline:7px;color:var(--primary);font-size:14px;font-weight:700 }
+.customer-edit-section > p { margin:0 0 12px;color:var(--muted);font-size:11px }
+.customer-edit-section.platform-data { background:#fbfcff }
 .customer-profile-panel .detail-grid { gap:12px }
 .customer-profile-panel .detail-field { min-height:74px;padding:12px 14px;border:1px solid #edf0f6;border-radius:11px;background:#fff }
 .customer-profile-panel .detail-field > small { color:var(--muted);font-size:11px }
@@ -1383,6 +1397,13 @@ td::before {
   .customer-profile-panel .detail-hero h2 { font-size:17px }
   .customer-profile-panel .detail-grid { grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:13px }
   .customer-profile-panel .detail-field { min-height:68px;padding:10px }
+  .customer-data-sections { grid-template-columns:1fr }
+  .customer-data-section { padding:12px 0 }
+  .customer-data-section + .customer-data-section { border-inline-start:0;border-top:1px solid var(--line) }
+  .customer-data-heading { align-items:flex-start }
+  .customer-edit-section { padding:12px }
+  .customer-edit-section .form-grid { grid-template-columns:1fr;gap:11px }
+  .customer-edit-section .field.full { grid-column:auto }
   .customer-content-grid { gap:11px }
   .task-filter-form { grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:14px }
   .task-filter-heading { align-items:flex-start }

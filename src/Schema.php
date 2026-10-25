@@ -9,9 +9,11 @@ final class Schema
         self::assertSupportedDriver($driver);
         $schemaTypes = self::schemaTypes($driver);
         self::createTables($db, $schemaTypes);
+        self::ensureCustomerCrmActivityColumn($db, $driver);
         if ($driver === 'sqlite') {
             self::createSqliteIndexes($db);
         }
+        self::backfillCustomerCrmActivity($db);
         self::createInitialAdmin($db);
     }
 
@@ -89,9 +91,28 @@ final class Schema
             billing_cycle {$text} NULL, subscription_status {$text} NULL, payment_status {$text} NULL,
             last_amount {$text} NULL, currency {$text} NULL, source_stage {$text} NULL,
             services {$longText} NULL, service_count INTEGER NULL, crm_stage {$text} NOT NULL DEFAULT 'new',
-            assigned_to BIGINT NULL, last_activity_at {$text} NULL, error_count INTEGER NOT NULL DEFAULT 0,
+            assigned_to BIGINT NULL, last_activity_at {$text} NULL, crm_last_activity_at {$text} NULL,
+            error_count INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL{$indexes}
         ){$engine}");
+    }
+
+    private static function ensureCustomerCrmActivityColumn(PDO $db, string $driver): void
+    {
+        if ($driver === 'sqlite') {
+            foreach ($db->query('PRAGMA table_info(customers)')->fetchAll() as $column) {
+                if ($column['name'] === 'crm_last_activity_at') return;
+            }
+        } else {
+            $query = $db->query("SHOW COLUMNS FROM customers LIKE 'crm_last_activity_at'");
+            if ($query->fetch()) return;
+        }
+        $db->exec('ALTER TABLE customers ADD COLUMN crm_last_activity_at VARCHAR(32) NULL');
+    }
+
+    private static function backfillCustomerCrmActivity(PDO $db): void
+    {
+        $db->exec("UPDATE customers SET crm_last_activity_at = (SELECT MAX(a.created_at) FROM customer_activity a WHERE a.customer_id = customers.id AND a.event_type IN ('updated', 'bulk_updated', 'tags_updated', 'note', 'task_created', 'task_updated')) WHERE crm_last_activity_at IS NULL AND EXISTS (SELECT 1 FROM customer_activity a WHERE a.customer_id = customers.id AND a.event_type IN ('updated', 'bulk_updated', 'tags_updated', 'note', 'task_created', 'task_updated'))");
     }
 
     private static function createNotesTable(PDO $db, array $types): void

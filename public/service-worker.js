@@ -1,11 +1,11 @@
-const CACHE_NAME = 'crm-pwa-shell-v1';
+const CACHE_NAME = 'crm-pwa-shell-v2';
 const APP_SHELL = [
   '/',
   '/manifest.json',
   '/icons/crm-icon.png',
   '/icons/crm-icon-512.png',
-  '/assets/app.css?v=crm-pwa-20261026',
-  '/assets/app.js?v=crm-pwa-20261026',
+  '/assets/app.css?v=crm-customer-profile-v3-20261026',
+  '/assets/app.js?v=crm-source-separation-20261026',
 ];
 
 self.addEventListener('install', (event) => {

@@ -3,10 +3,16 @@ declare(strict_types=1);
 
 final class ActivityLog
 {
+    private const CRM_ACTIVITY_EVENTS = ['updated', 'bulk_updated', 'tags_updated', 'note', 'task_created', 'task_updated'];
+
     public static function record(PDO $db, int $customerId, ?int $userId, string $eventType, string $summary): void
     {
+        $createdAt = gmdate('Y-m-d H:i:s');
         $db->prepare('INSERT INTO customer_activity (customer_id, user_id, event_type, summary, created_at) VALUES (?, ?, ?, ?, ?)')
-            ->execute([$customerId, $userId, $eventType, $summary, gmdate('Y-m-d H:i:s')]);
+            ->execute([$customerId, $userId, $eventType, $summary, $createdAt]);
+        if (in_array($eventType, self::CRM_ACTIVITY_EVENTS, true)) {
+            $db->prepare('UPDATE customers SET crm_last_activity_at = ?, updated_at = ? WHERE id = ?')->execute([$createdAt, $createdAt, $customerId]);
+        }
     }
 
     public static function forCustomer(PDO $db, int $customerId): array

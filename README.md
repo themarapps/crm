@@ -113,9 +113,9 @@ tags, notes, and tasks. New leads start in `new`; their source defaults to
 `website_form`. The endpoint supports server-to-server submissions and does not
 configure direct connections to any specific form or messaging provider.
 
-After installing a CRM update that adds schema objects, run `php bin/setup.php`
-once against the configured database before serving requests. It creates
-additive tables; normal API requests do not run schema setup.
+After installing a CRM update that adds schema objects or columns, run `php bin/setup.php`
+once against the configured database before serving requests. It creates additive
+schema objects; normal API requests do not run schema setup.
 
 ## Browser notifications and PWA
 

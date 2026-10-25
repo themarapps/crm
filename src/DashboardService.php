@@ -78,8 +78,14 @@ final class DashboardService
         $scope = CustomerAccess::canViewAll($user) ? '' : ' AND c.assigned_to = ?';
         $params = [gmdate('Y-m-d H:i:s', time() - 14 * 86400)];
         if (!CustomerAccess::canViewAll($user)) $params[] = (int) $user['id'];
-        $query = $db->prepare("SELECT c.id, c.name, c.crm_stage, c.assigned_to, COALESCE(c.last_activity_at, c.registered_at, c.created_at) AS last_contact_at FROM customers c WHERE COALESCE(c.last_activity_at, c.registered_at, c.created_at) < ?" . $scope . ' ORDER BY last_contact_at ASC LIMIT 8');
+        $latestActivity = self::latestActivityExpression();
+        $query = $db->prepare("SELECT c.id, c.name, c.crm_stage, c.assigned_to, {$latestActivity} AS last_contact_at FROM customers c WHERE {$latestActivity} < ?" . $scope . ' ORDER BY last_contact_at ASC LIMIT 8');
         $query->execute($params);
         return $query->fetchAll();
+    }
+
+    private static function latestActivityExpression(): string
+    {
+        return 'COALESCE(CASE WHEN c.crm_last_activity_at IS NULL THEN c.last_activity_at WHEN c.last_activity_at IS NULL THEN c.crm_last_activity_at WHEN c.crm_last_activity_at > c.last_activity_at THEN c.crm_last_activity_at ELSE c.last_activity_at END, c.registered_at, c.created_at)';
     }
 }
