@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+final class IntegrationSettingsException extends RuntimeException
+{
+}
+
 final class IntegrationSettingsService
 {
     public static function show(PDO $db): never
@@ -43,15 +47,15 @@ final class IntegrationSettingsService
     {
         $settings = self::find($db);
         if ($settings === null) {
-            Http::json(['error' => 'integration_not_configured', 'message' => 'احفظ بيانات الاتصال أولًا.'], 409);
+            throw new IntegrationSettingsException('بيانات الاتصال بالمصدر غير محفوظة.');
         }
         try {
             $credentials = json_decode(SecretCipher::decrypt($settings['credentials_ciphertext']), true, 4, JSON_THROW_ON_ERROR);
         } catch (JsonException | RuntimeException) {
-            Http::json(['error' => 'credentials_unreadable', 'message' => 'تعذر قراءة بيانات الاتصال؛ أعد حفظها ثم حاول مرة أخرى.'], 409);
+            throw new IntegrationSettingsException('تعذر قراءة بيانات الاتصال؛ أعد حفظها ثم حاول مرة أخرى.');
         }
         if (!is_array($credentials) || !is_string($credentials['username'] ?? null) || !is_string($credentials['password'] ?? null)) {
-            Http::json(['error' => 'credentials_unreadable', 'message' => 'بيانات الاتصال المحفوظة غير مكتملة.'], 409);
+            throw new IntegrationSettingsException('بيانات الاتصال المحفوظة غير مكتملة.');
         }
         return [
             'source_url' => $settings['source_url'],

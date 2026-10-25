@@ -1,25 +1,36 @@
 <?php
 declare(strict_types=1);
 
+final class SourceSyncBusyException extends RuntimeException
+{
+}
+
 final class SourceSyncService
 {
     private const LOCK_PATH = __DIR__ . '/../storage/source-sync.lock';
 
     public static function sync(PDO $db, int $actorId): never
     {
-        $lock = self::acquireLock();
-        $result = null;
-        $error = null;
         try {
-            $result = self::runSync($db, $actorId);
+            Http::json(self::run($db, $actorId));
+        } catch (SourceSyncBusyException $exception) {
+            Http::json(['error' => 'sync_in_progress', 'message' => $exception->getMessage()], 409);
+        } catch (IntegrationSettingsException $exception) {
+            Http::json(['error' => 'integration_not_configured', 'message' => $exception->getMessage()], 409);
         } catch (SourceSyncException $exception) {
-            $error = $exception->getMessage();
+            Http::json(['error' => 'source_sync_failed', 'message' => $exception->getMessage()], 502);
+        }
+    }
+
+    public static function run(PDO $db, int $actorId): array
+    {
+        $lock = self::acquireLock();
+        try {
+            return self::runSync($db, $actorId);
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
         }
-        if ($error !== null) Http::json(['error' => 'source_sync_failed', 'message' => $error], 502);
-        Http::json($result);
     }
 
     private static function acquireLock(): mixed
@@ -27,7 +38,7 @@ final class SourceSyncService
         $lock = fopen(self::LOCK_PATH, 'c');
         if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
             if (is_resource($lock)) fclose($lock);
-            Http::json(['error' => 'sync_in_progress', 'message' => 'المزامنة تعمل بالفعل؛ انتظر قليلًا ثم حاول مجددًا.'], 409);
+            throw new SourceSyncBusyException('المزامنة تعمل بالفعل؛ انتظر قليلًا ثم حاول مجددًا.');
         }
         return $lock;
     }
@@ -40,6 +51,7 @@ final class SourceSyncService
         $report = CsvImporter::importSourceRecords($db, $records, $actorId);
         return [
             'total' => count($records), 'created' => $report['created'], 'updated' => $report['updated'],
+            'unchanged' => $report['unchanged'],
             'skipped' => $report['skipped'], 'errors' => array_values(array_unique(array_column($report['errors'], 'reason'))),
             'synced_at' => gmdate('c'),
         ];

@@ -221,7 +221,7 @@ async function syncSourceCustomers(event) {
   try {
     const result = await request('/api/settings/source/sync', { method: 'POST', body: '{}' });
     const details = result.errors.length ? `<div class="muted">ملاحظات: ${result.errors.map(escapeHtml).join('، ')}</div>` : '';
-    status.innerHTML = `<div class="notice">اكتملت المزامنة: ${escapeHtml(result.created)} عميل جديد، ${escapeHtml(result.updated)} تحديث، ${escapeHtml(result.skipped)} متخطى من أصل ${escapeHtml(result.total)}.${details}</div>`;
+    status.innerHTML = `<div class="notice">اكتملت المزامنة: ${escapeHtml(result.created)} جديد، ${escapeHtml(result.updated)} تحديث، ${escapeHtml(result.unchanged)} دون تغيير، ${escapeHtml(result.skipped)} متخطى من أصل ${escapeHtml(result.total)}.${details}</div>`;
   } catch (error) {
     status.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
   } finally {

@@ -54,7 +54,7 @@ final class CsvImporter
         foreach ($records as $index => $record) {
             if (is_array($record)) $rows[] = self::normalizeSourceRecord($record, $index + 1);
         }
-        return self::importRows($db, $rows, $actorId);
+        return self::importRows($db, $rows, $actorId, true);
     }
 
     private static function normalizeSourceRecord(array $record, int $line): array
@@ -184,14 +184,15 @@ final class CsvImporter
         return substr($phone, 1);
     }
 
-    private static function importRows(PDO $db, array $csvRows, int $actorId): array
+    private static function importRows(PDO $db, array $csvRows, int $actorId, bool $skipUnchanged = false): array
     {
         $emailCounts = self::emailCounts($csvRows);
         $importReport = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+        if ($skipUnchanged) $importReport['unchanged'] = 0;
         $db->beginTransaction();
         try {
             foreach ($csvRows as $csvRow) {
-                $rowOutcome = self::importRow($db, $csvRow, $emailCounts, $actorId);
+                $rowOutcome = self::importRow($db, $csvRow, $emailCounts, $actorId, $skipUnchanged);
                 $importReport = self::recordOutcome($importReport, $rowOutcome);
             }
             $db->commit();
@@ -239,14 +240,18 @@ final class CsvImporter
         return $counts;
     }
 
-    private static function importRow(PDO $db, array $csvRow, array $emailCounts, int $actorId): array
+    private static function importRow(PDO $db, array $csvRow, array $emailCounts, int $actorId, bool $skipUnchanged): array
     {
         $outcome = self::classifyRow($db, $csvRow, $emailCounts);
         if ($outcome['status'] === 'skipped') {
             return $outcome;
         }
-        $customerId = self::persistImportedCustomer($db, self::customerFields($csvRow), $outcome['customer_id']);
-        ActivityLog::record($db, $customerId, $actorId, $outcome['status'] === 'created' ? 'created' : 'imported', $outcome['status'] === 'created' ? 'تمت إضافة العميل عبر استيراد CSV.' : 'تم تحديث بيانات العميل عبر استيراد CSV.');
+        $customerFields = self::customerFields($csvRow);
+        if ($skipUnchanged && $outcome['status'] === 'updated' && !self::hasImportedChanges($outcome['existing_customer'], $customerFields)) {
+            return array_merge($outcome, ['status' => 'unchanged']);
+        }
+        $customerId = self::persistImportedCustomer($db, $customerFields, $outcome['customer_id']);
+        ActivityLog::record($db, $customerId, $actorId, $outcome['status'] === 'created' ? 'created' : 'imported', $outcome['status'] === 'created' ? 'تمت إضافة العميل عبر الاستيراد.' : 'تم تحديث بيانات العميل عبر الاستيراد.');
         return $outcome;
     }
 
@@ -258,8 +263,9 @@ final class CsvImporter
         if ($rejection !== null) {
             return ['status' => 'skipped', 'reason' => $rejection, 'email' => $email, 'line' => $line];
         }
-        $customerId = self::existingCustomerId($db, $email);
-        return ['status' => $customerId === null ? 'created' : 'updated', 'email' => $email, 'line' => $line, 'customer_id' => $customerId];
+        $existing = self::existingCustomer($db, $email);
+        if ($existing === null) return ['status' => 'created', 'email' => $email, 'line' => $line, 'customer_id' => null];
+        return ['status' => 'updated', 'email' => $email, 'line' => $line, 'customer_id' => (int) $existing['id'], 'existing_customer' => $existing];
     }
 
     private static function rowRejection(array $csvRow, array $emailCounts): ?string
@@ -274,12 +280,21 @@ final class CsvImporter
         return trim((string) ($csvRow['name'] ?? '')) === '' ? 'اسم العميل مفقود.' : null;
     }
 
-    private static function existingCustomerId(PDO $db, string $email): ?int
+    private static function existingCustomer(PDO $db, string $email): ?array
     {
-        $customerQuery = $db->prepare('SELECT id FROM customers WHERE email = ?');
+        $columns = implode(', ', array_merge(['id'], self::CUSTOMER_FIELDS));
+        $customerQuery = $db->prepare('SELECT ' . $columns . ' FROM customers WHERE email = ?');
         $customerQuery->execute([$email]);
-        $customerId = $customerQuery->fetchColumn();
-        return $customerId === false ? null : (int) $customerId;
+        return $customerQuery->fetch() ?: null;
+    }
+
+    private static function hasImportedChanges(array $existing, array $incoming): bool
+    {
+        foreach (self::CUSTOMER_FIELDS as $field) {
+            $current = $existing[$field] === null ? null : self::normalizeImportedField((string) $existing[$field], $field);
+            if ($current !== ($incoming[$field] ?? null)) return true;
+        }
+        return false;
     }
 
     private static function customerFields(array $csvRow): array
@@ -336,6 +351,10 @@ final class CsvImporter
 
     private static function recordOutcome(array $importReport, array $rowOutcome): array
     {
+        if ($rowOutcome['status'] === 'unchanged') {
+            $importReport['unchanged']++;
+            return $importReport;
+        }
         if ($rowOutcome['status'] !== 'skipped') {
             $importReport[$rowOutcome['status']]++;
             return $importReport;

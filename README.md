@@ -83,8 +83,13 @@ The external source settings page stores the source base URL and encrypted login
 credentials. The 32-byte key at `storage/integration-encryption.key` must be provisioned
 outside Git as a root-owned `0640` file with the CRM PHP-FPM group, and backed up
 separately from the database dump. The administrator can trigger a paginated source sync
-from this page. Existing customers are matched by normalized email and only imported
-account fields are updated; CRM stages, assignments, notes, and follow-up tasks remain.
+from this page. Existing customers are matched by normalized email and only changed
+imported fields are written; unchanged rows are not updated or logged. CRM stages,
+assignments, notes, and follow-up tasks remain. `bin/sync-source.php` runs the same
+sync in scheduled jobs using the database environment, and reports counts only. The
+10-minute cron template is `deploy/crm-source-sync.cron`; its root-owned wrapper reads
+the PHP-FPM pool settings, then runs the sync process as `www-data`. Runs are logged with
+the `crm-source-sync` syslog tag using counts only.
 
 CSV rows are matched by normalized email. The interface previews a file before
 the user confirms the import. Arabic headers from the supplied export
