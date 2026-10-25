@@ -1,11 +1,12 @@
 # CRM
 
-Small, dependency-free PHP CRM with an Arabic, responsive interface and same-origin API. It supports customer records, notes, follow-up tasks, team accounts, filters, and repeat CSV imports. Serve `public/` as the document root and keep `storage/` outside the public directory.
+Small PHP CRM with an Arabic, responsive interface and same-origin API. It supports customer records, notes, follow-up tasks, team accounts, filters, repeat CSV imports, browser push notifications, and installable PWA support. Serve `public/` as the document root and keep `storage/` outside the public directory.
 
 ## Requirements
 
 - PHP 8.2 or newer with PDO and either `pdo_sqlite` or `pdo_mysql`.
 - HTTPS on any shared server.
+- Composer for the Web Push dependency (`minishlink/web-push`).
 - A database DSN and an initial administrator email and password.
 
 SQLite is the local default. MySQL can be selected by setting `DB_DSN`, for
@@ -113,9 +114,14 @@ tags, notes, and tasks. New leads start in `new`; their source defaults to
 configure direct connections to any specific form or messaging provider.
 
 After installing a CRM update that adds schema objects, run `php bin/setup.php`
-once against the configured database before serving requests. It creates the
-additive tag, attribution, permission, and audit tables; normal API requests do not
-run schema setup.
+once against the configured database before serving requests. It creates
+additive tables; normal API requests do not run schema setup.
+
+## Browser notifications and PWA
+
+The CRM can be installed from supported browsers and sends push reminders for open follow-up tasks to the task assignee. When a task has no assignee, it uses the customer's assigned owner, then the task creator. New customer notifications go to administrators and the assigned customer owner; imports or sync updates to existing customers do not count as new. The server checks every minute and sends generic reminders for tasks or customers created within the last 15 minutes; successful deliveries are recorded to avoid repeats. The browser must grant notification permission. On iPhone and iPad, install the web app to the Home Screen and open it there before enabling notifications.
+
+Install dependencies with `composer install --no-dev --classmap-authoritative`, run `php bin/setup.php` once to create the additive push tables, then provision stable VAPID keys once with `sudo -u www-data php bin/setup-web-push.php`. The private key stays in ignored `storage/web-push-vapid.php`; back it up securely and do not rotate it while subscriptions are active. Configure the root cron entry from `deploy/crm-push-notifications.cron` and install `deploy/crm-push-notifications-wrapper.sh` as `/usr/local/sbin/crm-push-notifications`, adjusting its app root, PHP CLI, and PHP-FPM pool path if needed. The wrapper runs as `www-data` and logs delivery counts only. The cron is independent from the existing 10-minute customer source sync.
 
 CSV rows are matched by normalized email. The interface previews a file before
 the user confirms the import. Arabic headers from the supplied export

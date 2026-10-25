@@ -264,6 +264,7 @@ button {
   transition:background-color 150ms ease,color 150ms ease,transform 120ms ease
 }
 .icon-button:hover { background:var(--surface-container);color:var(--primary) }
+.icon-button.active { background:var(--primary-container);color:var(--primary) }
 .icon-button .nav-icon { width:21px;height:21px }
 .logout-action:hover { background:var(--error-container);color:var(--red) }
 .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0 }

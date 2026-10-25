@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/Schema.php';
 require_once dirname(__DIR__) . '/src/Database.php';
+require_once dirname(__DIR__) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/src/Http.php';
 require_once dirname(__DIR__) . '/src/CustomerAccess.php';
 require_once dirname(__DIR__) . '/src/Auth.php';
@@ -18,6 +19,7 @@ require_once dirname(__DIR__) . '/src/SourceCustomerClient.php';
 require_once dirname(__DIR__) . '/src/SourceSyncService.php';
 require_once dirname(__DIR__) . '/src/DashboardService.php';
 require_once dirname(__DIR__) . '/src/Time.php';
+require_once dirname(__DIR__) . '/src/PushNotificationService.php';
 
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -41,6 +43,21 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 if ($method === 'GET' && str_starts_with($path, '/assets/') && is_file(__DIR__ . $path)) {
     return false;
 }
+if ($method === 'GET' && $path === '/service-worker.js' && is_file(__DIR__ . $path)) {
+    header('Content-Type: application/javascript; charset=utf-8');
+    header('Cache-Control: no-cache');
+    readfile(__DIR__ . $path);
+    exit;
+}
+if ($method === 'GET' && $path === '/manifest.webmanifest' && is_file(__DIR__ . $path)) {
+    header('Content-Type: application/manifest+json; charset=utf-8');
+    header('Cache-Control: no-cache');
+    readfile(__DIR__ . $path);
+    exit;
+}
+if ($method === 'GET' && str_starts_with($path, '/icons/') && is_file(__DIR__ . $path)) {
+    return false;
+}
 if ($method === 'GET' && ($path === '/' || preg_match('#^/(dashboard|customers(?:/\d+)?|tasks|import|team|reports|settings)$#', $path))) {
     header('Content-Type: text/html; charset=utf-8');
     readfile(__DIR__ . '/index.html');
@@ -61,8 +78,13 @@ try {
         Auth::login($db, Http::body());
     }
     if ($path === '/api/auth/logout' && $method === 'POST') {
-        Auth::requireUser($db);
+        $logoutUser = Auth::requireUser($db);
         Http::requireCsrf();
+        $logoutFields = Http::body();
+        $endpoint = $logoutFields['push_endpoint'] ?? null;
+        if (is_string($endpoint) && $endpoint !== '') {
+            PushNotificationService::removeForLogout($db, $endpoint, (int) $logoutUser['id']);
+        }
         $_SESSION = [];
         session_regenerate_id(true);
         Http::json(['ok' => true]);
@@ -78,6 +100,15 @@ try {
     }
     if ($path === '/api/me' && $method === 'GET') {
         Http::json(['user' => $user, 'csrf_token' => Http::csrf()]);
+    }
+    if ($path === '/api/notifications/config' && $method === 'GET') {
+        PushNotificationService::config();
+    }
+    if ($path === '/api/notifications/subscription' && $method === 'POST') {
+        PushNotificationService::subscribe($db, Http::body(), $user);
+    }
+    if ($path === '/api/notifications/subscription' && $method === 'DELETE') {
+        PushNotificationService::unsubscribe($db, Http::body(), $user);
     }
     if ($path === '/api/dashboard' && $method === 'GET') {
         DashboardService::summary($db, $user);

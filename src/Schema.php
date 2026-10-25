@@ -45,6 +45,7 @@ final class Schema
         self::createActivityTable($db, $types);
         self::createIntegrationSettingsTable($db, $types);
         self::createTasksTable($db, $types);
+        self::createWebPushTables($db, $types);
         self::createLoginAttemptsTable($db, $types);
     }
 
@@ -80,7 +81,7 @@ final class Schema
     private static function createCustomersTable(PDO $db, array $types): void
     {
         $id = $types['id']; $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
-        $indexes = $types['indexes'] ? ', INDEX customers_stage_idx (crm_stage), INDEX customers_subscription_idx (subscription_status)' : '';
+        $indexes = $types['indexes'] ? ', INDEX customers_stage_idx (crm_stage), INDEX customers_subscription_idx (subscription_status), INDEX customers_created_idx (created_at)' : '';
         $db->exec("CREATE TABLE IF NOT EXISTS customers (
             id {$id}, external_id {$text} NULL, name {$text} NOT NULL, email {$text} NOT NULL UNIQUE,
             phone {$text} NULL, account_type {$text} NULL, company_url {$text} NULL,
@@ -150,6 +151,27 @@ final class Schema
         ){$engine}");
     }
 
+    private static function createWebPushTables(PDO $db, array $types): void
+    {
+        $id = $types['id']; $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
+        $userIndex = $types['indexes'] ? ', INDEX web_push_user_idx (user_id)' : '';
+        $taskIndex = $types['indexes'] ? ', INDEX task_push_delivery_task_idx (task_id)' : '';
+        $db->exec("CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+            id {$id}, user_id BIGINT NOT NULL, endpoint_hash CHAR(64) NOT NULL UNIQUE,
+            endpoint {$longText} NOT NULL, p256dh {$text} NOT NULL, auth_token {$text} NOT NULL,
+            created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL{$userIndex}
+        ){$engine}");
+        $db->exec("CREATE TABLE IF NOT EXISTS task_push_deliveries (
+            id {$id}, task_id BIGINT NOT NULL, subscription_id BIGINT NOT NULL,
+            delivered_at DATETIME NOT NULL, UNIQUE (task_id, subscription_id){$taskIndex}
+        ){$engine}");
+        $customerIndex = $types['indexes'] ? ', INDEX customer_push_delivery_customer_idx (customer_id)' : '';
+        $db->exec("CREATE TABLE IF NOT EXISTS customer_push_deliveries (
+            id {$id}, customer_id BIGINT NOT NULL, subscription_id BIGINT NOT NULL,
+            delivered_at DATETIME NOT NULL, UNIQUE (customer_id, subscription_id){$customerIndex}
+        ){$engine}");
+    }
+
     private static function createLoginAttemptsTable(PDO $db, array $types): void
     {
         $id = $types['id']; $indexes = $types['indexes'] ? ', INDEX login_attempt_identity_idx (identity_hash, attempted_at)' : '';
@@ -163,6 +185,7 @@ final class Schema
     {
         $db->exec('CREATE INDEX IF NOT EXISTS customers_stage_idx ON customers (crm_stage)');
         $db->exec('CREATE INDEX IF NOT EXISTS customers_subscription_idx ON customers (subscription_status)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customers_created_idx ON customers (created_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS customer_attribution_source_idx ON customer_attribution (lead_source)');
         $db->exec('CREATE INDEX IF NOT EXISTS customer_attribution_campaign_idx ON customer_attribution (campaign)');
         $db->exec('CREATE INDEX IF NOT EXISTS customer_tags_tag_idx ON customer_tags (tag_id)');
@@ -172,6 +195,9 @@ final class Schema
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_customer_idx ON follow_up_tasks (customer_id)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_due_idx ON follow_up_tasks (due_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_assignee_idx ON follow_up_tasks (assignee_id)');
+        $db->exec('CREATE INDEX IF NOT EXISTS web_push_user_idx ON web_push_subscriptions (user_id)');
+        $db->exec('CREATE INDEX IF NOT EXISTS task_push_delivery_task_idx ON task_push_deliveries (task_id)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customer_push_delivery_customer_idx ON customer_push_deliveries (customer_id)');
         $db->exec('CREATE INDEX IF NOT EXISTS login_attempt_identity_idx ON login_attempts (identity_hash, attempted_at)');
     }
 

@@ -1,5 +1,9 @@
 const app = document.querySelector('#app');
 const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '', calendarMonth: '', selectedTaskDate: '' };
+let serviceWorkerRegistration = null;
+let serviceWorkerFailure = null;
+let installPromptEvent = null;
+window.addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); installPromptEvent = event; });
 const labels = {
   new: 'جديد', contacted: 'تم التواصل', appointment_scheduled: 'تم تحديد موعد', interested: 'مهتم', not_interested: 'غير مهتم',
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
@@ -16,6 +20,8 @@ const icons = {
   brand: '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/><path d="m10 10-4-4m8 0-4 4m0 4-4 4m8 0-4-4m0-4 4-4m-4 12 4-4"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18m-13 4 2 2 4-4"/>',
+  notifications: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+  install: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
   personAdd: '<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm11-3v6m3-3h-6"/>',
   alert: '<path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
   verified: '<path d="M12 3 14 5.5l3.2-.2.8 3.1 2.7 1.7-1.1 3 1.1 3-2.7 1.7-.8 3.1-3.2-.2L12 23l-2-2.5-3.2.2-.8-3.1-2.7-1.7 1.1-3-1.1-3 2.7-1.7.8-3.1 3.2.2L12 3Z"/><path d="m9 13 2 2 4-4"/>',
@@ -77,6 +83,7 @@ function showError(error) {
 }
 
 async function initialize() {
+  void registerServiceWorker();
   try {
     const csrf = await request('/api/csrf');
     state.csrf = csrf.csrf_token;
@@ -91,6 +98,82 @@ async function initialize() {
   } catch (error) {
     app.innerHTML = `<div class="login-wrap"><section class="login-card"><h1>تعذر الاتصال</h1><p class="muted">${escapeHtml(error.message)}</p></section></div>`;
   }
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    serviceWorkerFailure = new Error('هذا المتصفح لا يدعم تشغيل التطبيق المثبت.');
+    return;
+  }
+  try {
+    serviceWorkerRegistration = await navigator.serviceWorker.register('/service-worker.js');
+    await updateNotificationButton();
+  } catch (error) {
+    serviceWorkerFailure = error;
+  }
+}
+
+async function updateNotificationButton() {
+  const button = document.querySelector('[data-action="enable-notifications"]');
+  if (!button || !serviceWorkerRegistration || !('PushManager' in window) || !('Notification' in window)) return;
+  const subscription = await serviceWorkerRegistration.pushManager.getSubscription();
+  const enabled = Boolean(subscription && 'Notification' in window && Notification.permission === 'granted');
+  button.title = enabled ? 'الإشعارات مفعّلة' : 'تفعيل إشعارات المتابعة';
+  button.setAttribute('aria-label', button.title);
+  button.classList.toggle('active', enabled);
+}
+
+async function enableBrowserNotifications() {
+  if (!('Notification' in window) || !('PushManager' in window) || !('serviceWorker' in navigator)) {
+    window.alert('هذا المتصفح لا يدعم إشعارات الويب.');
+    return;
+  }
+  const isAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isAppleMobile && !isInstalled) {
+    window.alert('على iPhone وiPad، أضف التطبيق إلى الشاشة الرئيسية أولًا، ثم افتحه من الأيقونة وفعّل الإشعارات.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    window.alert('إشعارات الموقع محظورة من المتصفح. اسمح بها من إعدادات الموقع ثم أعد المحاولة.');
+    return;
+  }
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (permission !== 'granted') return;
+  try {
+    const config = await request('/api/notifications/config');
+    if (!config.enabled || !config.public_key) throw new Error('إشعارات المتصفح غير مهيأة على الخادم بعد.');
+    if (!serviceWorkerRegistration) await registerServiceWorker();
+    if (!serviceWorkerRegistration) throw new Error(serviceWorkerFailure?.message || 'تعذر تشغيل خدمة إشعارات المتصفح.');
+    const current = await serviceWorkerRegistration.pushManager.getSubscription();
+    const subscription = current || await serviceWorkerRegistration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeVapidKey(config.public_key) });
+    await request('/api/notifications/subscription', { method: 'POST', body: JSON.stringify(subscription.toJSON()) });
+    await updateNotificationButton();
+    window.alert('تم تفعيل إشعارات المتابعة على هذا المتصفح.');
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function decodeVapidKey(encodedKey) {
+  const padding = '='.repeat((4 - encodedKey.length % 4) % 4);
+  const base64 = (encodedKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+}
+
+async function installPwa() {
+  if (installPromptEvent) {
+    await installPromptEvent.prompt();
+    await installPromptEvent.userChoice;
+    installPromptEvent = null;
+    return;
+  }
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    window.alert('التطبيق مثبت بالفعل على هذا الجهاز.');
+    return;
+  }
+  window.alert('لتثبيت التطبيق، افتح قائمة المتصفح واختر «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق». على iPhone وiPad افتحه في Safari ثم اختر «إضافة إلى الشاشة الرئيسية».');
 }
 
 function renderLogin() {
@@ -128,7 +211,7 @@ function shell(content, activeKey, title) {
   const mobile = visibleRoutes.map(([key, path, label, iconName]) => `<a class="${key === activeKey ? 'active' : ''}" href="#${path}">${icon(iconName)}${label}</a>`).join('');
   const memberInitial = escapeHtml((state.user.name || 'م').slice(0, 1));
   return `<div class="shell"><aside class="sidebar"><div class="sidebar-top"><a class="brand" href="#/" aria-label="Smaguide CRM - لوحة التحكم"><span class="brand-mark">${icon('brand')}</span><span class="brand-copy"><strong>Smaguide CRM</strong><small>إدارة اشتراكات ومتابعات العملاء</small></span></a><span class="brand-badge"><i></i>نسخة الفريق الداخلي</span><nav class="nav">${navigation}</nav></div><div class="side-bottom"><div class="user-mini"><span class="avatar">${memberInitial}</span><div class="user-info"><strong>${escapeHtml(state.user.name)}</strong><small>${labels[state.user.role] || 'عضو فريق'}</small></div><button class="icon-button logout-action" data-action="logout" type="button" aria-label="تسجيل الخروج" title="تسجيل الخروج">${icon('logout')}</button></div></div></aside>
-  <section class="main"><header class="topbar"><form class="global-search" id="global-search" role="search"><label class="sr-only" for="global-customer-search">بحث سريع عن العملاء</label>${icon('search')}<input id="global-customer-search" name="q" type="search" placeholder="بحث سريع عن العملاء بالاسم، البريد أو رقم الجوال..."></form><div class="top-actions"><a class="icon-button calendar-shortcut" href="#/tasks" aria-label="المهام والمواعيد" title="المهام والمواعيد">${icon('calendar')}</a>${canEditCustomers() ? `<button class="btn primary desktop-action" data-action="new-customer" type="button" aria-label="إضافة عميل جديد">${icon('personAdd')}<span class="quick-create-label">إضافة عميل جديد</span></button>` : ''}<span class="avatar top-avatar" aria-label="${escapeHtml(state.user.name)}" title="${escapeHtml(state.user.name)}">${memberInitial}</span></div></header><main class="content" aria-label="${title}">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
+  <section class="main"><header class="topbar"><form class="global-search" id="global-search" role="search"><label class="sr-only" for="global-customer-search">بحث سريع عن العملاء</label>${icon('search')}<input id="global-customer-search" name="q" type="search" placeholder="بحث سريع عن العملاء بالاسم، البريد أو رقم الجوال..."></form><div class="top-actions"><button class="icon-button" data-action="enable-notifications" type="button" aria-label="تفعيل الإشعارات" title="تفعيل الإشعارات">${icon('notifications')}</button><button class="icon-button" data-action="install-pwa" type="button" aria-label="تثبيت التطبيق" title="تثبيت التطبيق">${icon('install')}</button><a class="icon-button calendar-shortcut" href="#/tasks" aria-label="المهام والمواعيد" title="المهام والمواعيد">${icon('calendar')}</a>${canEditCustomers() ? `<button class="btn primary desktop-action" data-action="new-customer" type="button" aria-label="إضافة عميل جديد">${icon('personAdd')}<span class="quick-create-label">إضافة عميل جديد</span></button>` : ''}<span class="avatar top-avatar" aria-label="${escapeHtml(state.user.name)}" title="${escapeHtml(state.user.name)}">${memberInitial}</span></div></header><main class="content" aria-label="${title}">${content}</main></section><nav class="mobile-nav">${mobile}</nav></div>`;
 }
 
 function pageHead(title, description, action = '') {
@@ -151,7 +234,7 @@ function badge(status) {
 function dateLabel(dateText) {
   if (!dateText) return '—';
   const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
-  return Number.isNaN(date.valueOf()) ? escapeHtml(dateText) : new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(date);
+  return Number.isNaN(date.valueOf()) ? escapeHtml(dateText) : new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', dateStyle: 'medium' }).format(date);
 }
 
 function dateTimeLabel(dateText) {
@@ -161,7 +244,7 @@ function dateTimeLabel(dateText) {
   const normalized = dateText.includes('T') ? dateText : dateText.replace(' ', 'T');
   const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
   if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
-  const options = { dateStyle: 'medium', timeZone: hasTimezone ? 'Asia/Riyadh' : 'UTC' };
+  const options = { calendar: 'gregory', dateStyle: 'medium', timeZone: hasTimezone ? 'Asia/Riyadh' : 'UTC' };
   if (hasTime) options.timeStyle = 'short';
   const formatted = new Intl.DateTimeFormat('ar-SA', options).format(date);
   return hasTime ? `تاريخ ووقت التسجيل: ${formatted}` : `تاريخ التسجيل: ${formatted} · الوقت غير متوفر`;
@@ -220,7 +303,7 @@ function taskDateTimeLabel(dateText) {
   if (!dateText) return 'موعد غير محدد';
   const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
   if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
-  return new Intl.DateTimeFormat('ar-SA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }).format(date);
+  return new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }).format(date);
 }
 
 async function renderReports() {
@@ -682,6 +765,7 @@ async function renderTeam() {
 
 function bindShell() {
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => runAction(button)));
+  updateNotificationButton().catch(() => {});
   document.querySelector('#global-search')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const query = String(new FormData(event.currentTarget).get('q') || '').trim();
@@ -701,8 +785,13 @@ async function runAction(button) {
     if (button.dataset.action === 'delete-view') return deleteCurrentView();
     if (button.dataset.action === 'bulk-update') return bulkUpdateCustomers();
     if (button.dataset.action === 'logout') {
-      await request('/api/auth/logout', { method: 'POST', body: '{}' }); state.user = null; state.csrf = ''; state.selectedCustomers.clear(); return render();
+      const subscription = await serviceWorkerRegistration?.pushManager.getSubscription();
+      await request('/api/auth/logout', { method: 'POST', body: JSON.stringify({ push_endpoint: subscription?.endpoint || null }) });
+      if (subscription) await subscription.unsubscribe();
+      state.user = null; state.csrf = ''; state.selectedCustomers.clear(); return render();
     }
+    if (button.dataset.action === 'enable-notifications') return enableBrowserNotifications();
+    if (button.dataset.action === 'install-pwa') return installPwa();
     if (button.dataset.action === 'new-customer') return customerDialog();
     if (button.dataset.action === 'edit-customer') return customerDialog(state.currentCustomer);
     if (button.dataset.action === 'new-task') return taskDialog();
@@ -830,7 +919,7 @@ async function taskDialog() {
   const customerField = customerId
     ? `<div class="field full"><label>العميل</label><input type="hidden" name="customer_id" value="${escapeHtml(customerId)}"><input value="${escapeHtml(selectedCustomer?.name || '')}" readonly aria-readonly="true"><small class="muted">لا يمكن تغيير العميل من داخل ملفه.</small></div>`
     : `<div class="field full"><label>العميل</label><select name="customer_id" required><option value="">اختر العميل</option>${selectOptions(customers.data, '', (person) => person.name, (person) => person.id)}</select></div>`;
-  const dialog = openDialog('إضافة متابعة', `<form id="task-form"><div class="form-grid">${customerField}<div class="field full"><label>عنوان المهمة</label><input name="title" required maxlength="200" placeholder="مثال: متابعة تجديد الاشتراك"></div><div class="field"><label>موعد المتابعة</label><input name="due_at" type="datetime-local" required></div><div class="field"><label>المسؤول</label><select name="assignee_id"><option value="">بدون مسؤول</option>${selectOptions(team.data.filter((member) => member.is_active))}</select></div><div class="field full"><label>تفاصيل</label><textarea name="details" maxlength="10000"></textarea></div></div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ المهمة</button></div></form>`);
+  const dialog = openDialog('إضافة متابعة', `<form id="task-form"><div class="form-grid">${customerField}<div class="field full"><label>عنوان المهمة</label><input name="title" required maxlength="200" placeholder="مثال: متابعة تجديد الاشتراك"></div><div class="field"><label>موعد المتابعة</label><input name="due_at" type="datetime-local" lang="en-GB" required></div><div class="field"><label>المسؤول</label><select name="assignee_id"><option value="">بدون مسؤول</option>${selectOptions(team.data.filter((member) => member.is_active))}</select></div><div class="field full"><label>تفاصيل</label><textarea name="details" maxlength="10000"></textarea></div></div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ المهمة</button></div></form>`);
   dialog.querySelector('#task-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const fields = Object.fromEntries(new FormData(event.currentTarget));
