@@ -163,7 +163,7 @@ async function render() {
 }
 
 async function renderDashboard() {
-  const [dashboard, customers] = await Promise.all([request('/api/dashboard'), request('/api/customers?per_page=6')]);
+  const [dashboard, customers] = await Promise.all([request('/api/dashboard'), request('/api/customers?per_page=6&sort=registered_at&direction=desc')]);
   const counts = dashboard.counts;
   const overdueRows = dashboard.overdue_tasks.length ? dashboard.overdue_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div><a class="btn small" href="#/customers/${task.customer_id}">فتح العميل</a></div>`).join('') : '';
   const taskRows = dashboard.upcoming_tasks.length ? dashboard.upcoming_tasks.map((task) => `<div class="task-row"><div><strong>${escapeHtml(task.title)}</strong><div class="person"><small>${escapeHtml(task.customer_name)} · ${dateLabel(task.due_at)}</small></div></div><a class="btn small" href="#/customers/${task.customer_id}">العميل</a></div>`).join('') : '<div class="empty">لا توجد متابعات قادمة.</div>';
