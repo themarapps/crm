@@ -707,6 +707,10 @@ async function taskDialog() {
   state.team = team.data;
   const routeParts = routePath().split('/');
   const customerId = routeParts[0] === 'customers' ? routeParts[1] : '';
+  if (customerId && !customers.data.some((customer) => String(customer.id) === customerId)) {
+    const currentCustomer = await request(`/api/customers/${customerId}`);
+    customers.data.unshift(currentCustomer.customer);
+  }
   const dialog = openDialog('إضافة متابعة', `<form id="task-form"><div class="form-grid"><div class="field full"><label>العميل</label><select name="customer_id" required><option value="">اختر العميل</option>${selectOptions(customers.data, customerId, (person) => person.name, (person) => person.id)}</select></div><div class="field full"><label>عنوان المهمة</label><input name="title" required maxlength="200" placeholder="مثال: متابعة تجديد الاشتراك"></div><div class="field"><label>موعد المتابعة</label><input name="due_at" type="datetime-local" required></div><div class="field"><label>المسؤول</label><select name="assignee_id"><option value="">بدون مسؤول</option>${selectOptions(team.data.filter((member) => member.is_active))}</select></div><div class="field full"><label>تفاصيل</label><textarea name="details" maxlength="10000"></textarea></div></div><div data-error></div><div class="form-actions"><button class="btn primary">حفظ المهمة</button></div></form>`);
   dialog.querySelector('#task-form').addEventListener('submit', async (event) => {
     event.preventDefault();
