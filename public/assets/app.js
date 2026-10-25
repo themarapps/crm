@@ -212,17 +212,21 @@ function integrationSettingsMarkup(settings) {
   const status = settings.credentials_configured ? 'بيانات محفوظة' : 'غير مكتمل';
   const userPlaceholder = settings.credentials_configured ? 'اتركه فارغًا للإبقاء على الحالي' : 'اسم المستخدم';
   const passwordPlaceholder = settings.credentials_configured ? 'اتركها فارغة للإبقاء على الحالية' : 'كلمة المرور';
+  const deleteButton = settings.credentials_configured
+    ? '<button class="btn danger" type="button" data-source-delete>حذف بيانات الربط</button>'
+    : '';
   return `${pageHead('الربط بمصدر العملاء', 'احفظ بيانات الدخول للمصدر الذي تُجلب منه سجلات العملاء.')}${notice}
     <section class="panel integration-panel"><div class="panel-head"><h2>بيانات الاتصال</h2><span class="badge ${settings.credentials_configured ? 'active' : 'neutral'}">${status}</span></div><div class="panel-body">
     <form id="integration-form"><div class="form-grid"><div class="field full"><label for="source-url">الرابط الأساسي للمصدر</label><input id="source-url" name="source_url" type="url" value="${escapeHtml(settings.source_url)}" placeholder="https://example.com" required></div>
     <div class="field"><label for="source-username">اسم المستخدم</label><input id="source-username" name="username" autocomplete="username" placeholder="${userPlaceholder}"></div>
     <div class="field"><label for="source-password">كلمة المرور</label><input id="source-password" name="password" type="password" autocomplete="new-password" placeholder="${passwordPlaceholder}"></div></div>
-    <div id="integration-status" aria-live="polite"></div><div id="sync-status" aria-live="polite"></div><div class="form-actions"><button class="btn primary" type="submit" ${settings.encryption_ready ? '' : 'disabled'}>حفظ بيانات الربط</button><button class="btn" type="button" data-source-sync ${settings.credentials_configured ? '' : 'disabled'}>مزامنة الآن</button></div></form></div></section>`;
+    <div id="integration-status" aria-live="polite"></div><div id="sync-status" aria-live="polite"></div><div class="form-actions"><button class="btn primary" type="submit" ${settings.encryption_ready ? '' : 'disabled'}>حفظ بيانات الربط</button><button class="btn" type="button" data-source-sync ${settings.credentials_configured ? '' : 'disabled'}>مزامنة الآن</button>${deleteButton}</div></form></div></section>`;
 }
 
 function bindIntegrationForm() {
   document.querySelector('#integration-form').addEventListener('submit', saveIntegrationSettings);
   document.querySelector('[data-source-sync]').addEventListener('click', syncSourceCustomers);
+  document.querySelector('[data-source-delete]')?.addEventListener('click', deleteIntegrationSettings);
 }
 
 async function saveIntegrationSettings(event) {
@@ -239,6 +243,20 @@ async function saveIntegrationSettings(event) {
   } catch (error) {
     document.querySelector('#integration-status').innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
   } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteIntegrationSettings(event) {
+  const button = event.currentTarget;
+  const confirmed = window.confirm('سيتم حذف رابط المصدر وبيانات الدخول المحفوظة. لن تُحذف سجلات العملاء الحالية، لكن المزامنة الدورية ستتوقف حتى حفظ بيانات ربط جديدة. هل تريد المتابعة؟');
+  if (!confirmed) return;
+  button.disabled = true;
+  try {
+    await request('/api/settings/source', { method: 'DELETE', body: '{}' });
+    await renderIntegrationSettings();
+  } catch (error) {
+    document.querySelector('#integration-status').innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
     button.disabled = false;
   }
 }

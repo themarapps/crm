@@ -93,6 +93,10 @@ try {
         Auth::requireAdmin($user);
         IntegrationSettingsService::save($db, Http::body());
     }
+    if ($path === '/api/settings/source' && $method === 'DELETE') {
+        Auth::requireAdmin($user);
+        IntegrationSettingsService::delete($db);
+    }
     if ($path === '/api/settings/source/sync' && $method === 'POST') {
         Auth::requireAdmin($user);
         SourceSyncService::sync($db, (int) $user['id']);

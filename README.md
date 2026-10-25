@@ -44,7 +44,7 @@ token returned by `GET /api/csrf` in the `X-CSRF-Token` header.
 - `GET /api/me`
 - `GET /api/dashboard` — counts, upcoming/overdue follow-ups, and customers with no recorded activity for 14 days, scoped to customer visibility
 - `GET /api/reports/summary` — customer totals grouped by stage, subscription status, and plan, plus team performance (manager/admin)
-- `GET|PUT /api/settings/source` — administrator-only external source connection settings; credentials are encrypted at rest
+- `GET|PUT|DELETE /api/settings/source` — administrator-only external source connection settings; credentials are encrypted at rest, and delete removes the saved connection without deleting CRM customer records
 - `POST /api/settings/source/sync` — administrator-only customer sync from the configured source, matched by normalized email
 - `GET|POST /api/customers`
 - `POST /api/customers/bulk` — atomically updates stage and/or assignment for up to 100 accessible customers (edit access required; assignment requires view-all)

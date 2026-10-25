@@ -43,6 +43,12 @@ final class IntegrationSettingsService
         Http::json(['configured' => true, 'source_url' => $sourceUrl, 'credentials_configured' => true]);
     }
 
+    public static function delete(PDO $db): never
+    {
+        $db->prepare('DELETE FROM integration_settings WHERE id = 1')->execute();
+        Http::json(['configured' => false]);
+    }
+
     public static function connectionDetails(PDO $db): array
     {
         $settings = self::find($db);
