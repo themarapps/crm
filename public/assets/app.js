@@ -1,4 +1,5 @@
 const app = document.querySelector('#app');
+const GREGORIAN_ARABIC_LOCALE = 'ar-SA-u-ca-gregory-nu-latn';
 const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '', calendarMonth: '', selectedTaskDate: '' };
 let serviceWorkerRegistration = null;
 let serviceWorkerFailure = null;
@@ -234,7 +235,7 @@ function badge(status) {
 function dateLabel(dateText) {
   if (!dateText) return '—';
   const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
-  return Number.isNaN(date.valueOf()) ? escapeHtml(dateText) : new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', dateStyle: 'medium' }).format(date);
+  return Number.isNaN(date.valueOf()) ? escapeHtml(dateText) : new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, { calendar: 'gregory', dateStyle: 'medium' }).format(date);
 }
 
 function dateTimeLabel(dateText) {
@@ -252,7 +253,7 @@ function dateTimeDisplay(dateText) {
   if (Number.isNaN(date.valueOf())) return dateText;
   const options = { calendar: 'gregory', dateStyle: 'medium', timeZone: hasTimezone ? 'Asia/Riyadh' : 'UTC' };
   if (/\d{1,2}:\d{2}/.test(dateText)) options.timeStyle = 'short';
-  return new Intl.DateTimeFormat('ar-SA', options).format(date);
+  return new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, options).format(date);
 }
 
 async function render() {
@@ -308,7 +309,7 @@ function taskDateTimeLabel(dateText) {
   if (!dateText) return 'موعد غير محدد';
   const date = new Date(dateText.includes('T') ? dateText : `${dateText.replace(' ', 'T')}Z`);
   if (Number.isNaN(date.valueOf())) return escapeHtml(dateText);
-  return new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }).format(date);
+  return new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, { calendar: 'gregory', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }).format(date);
 }
 
 async function renderReports() {
@@ -660,7 +661,7 @@ function riyadhTodayKey() {
 }
 
 function riyadhDateKey(date) {
-  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const parts = new Intl.DateTimeFormat('en-GB-u-ca-gregory-nu-latn', { calendar: 'gregory', timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
   const field = (name) => parts.find((part) => part.type === name).value;
   return `${field('year')}-${field('month')}-${field('day')}`;
 }
@@ -723,13 +724,13 @@ function taskCalendarMarkup(tasks) {
     return byDay;
   }, {});
   const today = riyadhDateKey(new Date());
-  const spokenDateFormatter = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const spokenDateFormatter = new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
   const calendarContext = { month, grouped, today, spokenDateFormatter };
   const days = Array.from({ length: 42 }, (_, index) => calendarDayMarkup(gridStart, index, calendarContext));
   const dailyTasks = (grouped[state.selectedTaskDate] || []).map(taskCard).join('') || '<div class="empty">لا توجد مهام مجدولة لهذا اليوم.</div>';
-  const monthName = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
+  const monthName = new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, { calendar: 'gregory', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)));
   const selectedDate = new Date(`${state.selectedTaskDate}T00:00:00Z`);
-  const selectedLabel = new Intl.DateTimeFormat('ar-SA', { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selectedDate);
+  const selectedLabel = new Intl.DateTimeFormat(GREGORIAN_ARABIC_LOCALE, { calendar: 'gregory', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selectedDate);
   return `<section class="panel task-calendar"><div class="panel-head"><h2>تقويم المهام</h2><div class="calendar-nav"><button class="btn small" data-action="calendar-previous" aria-label="الشهر السابق">‹</button><strong>${monthName}</strong><button class="btn small" data-action="calendar-next" aria-label="الشهر التالي">›</button></div></div><div class="panel-body"><div class="calendar-grid calendar-weekdays">${['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid">${days.join('')}</div><div class="calendar-day-tasks"><h3>مهام يوم ${escapeHtml(selectedLabel)}</h3>${dailyTasks}</div></div></section>`;
 }
 
