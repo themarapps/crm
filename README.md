@@ -61,7 +61,7 @@ token returned by `GET /api/csrf` in the `X-CSRF-Token` header.
 - `POST /api/leads/inbound` — server-to-server lead intake, authenticated with `Authorization: Bearer <token>`
 
 Customer create and update use JSON field names matching the CSV columns in
-snake_case, plus `crm_stage` (`new`, `contacted`, `interested`,
+snake_case, plus `crm_stage` (`new`, `contacted`, `appointment_scheduled`, `interested`,
 `not_interested`) and `assigned_to`. Optional CRM metadata includes `lead_source`,
 `campaign`, and `tags` (an array of up to 20 tag names). Omitting optional metadata
 from an update preserves its current value. `PUT /api/customers/{id}` is a full update:
@@ -81,7 +81,7 @@ also returns lead sources, campaigns, and tags visible to the signed-in member.
 
 Customer list filters: `q`, `subscription_status`, `payment_status`, `plan`, `stage`, `assigned_to`, `lead_source`, `campaign`, `tag`,
 `sort` (`name`, `phone`, `plan`, `subscription_status`, `crm_stage`, `assigned_to`, `registered_at`, `updated_at`), `direction` (`asc`, `desc`), `page`, `per_page`. Users can save named filter views in this browser; views are stored locally per signed-in user and do not sync across devices. Bulk updates accept `{ "ids": [1, 2], "crm_stage": "contacted", "assigned_to": 4 }`; either update field may be omitted, and use `null` for an unassigned owner. Task list filters: `status`, `due` (`today`, `overdue`, `upcoming`). The tasks page calendar shows a six-week month grid in `Asia/Riyadh`, task counts by day, and the selected day's task list; the existing overdue/today/upcoming task sections remain available below it.
-Dashboard inactivity reminders use the last recorded customer activity, then registration/creation time when no activity exists. Team performance counts customers and overdue tasks by assigned owner. Its conversion rate is the share of that owner's customers currently in `contacted` or `interested` stage; it is a current-stage share, not a historical cohort conversion rate.
+Dashboard inactivity reminders use the last recorded customer activity, then registration/creation time when no activity exists. Team performance counts customers and overdue tasks by assigned owner. Its conversion rate is the share of that owner's customers currently in `contacted`, `appointment_scheduled`, or `interested` stage; it is a current-stage share, not a historical cohort conversion rate.
 Roles are `admin` (full access and team management), `manager` (all customer, task,
 report, import, and export access), and `member` (customers assigned to them and
 their related follow-ups). Administrators can override each non-admin member's

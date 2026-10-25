@@ -1,7 +1,7 @@
 const app = document.querySelector('#app');
 const state = { user: null, csrf: '', team: [], filters: {}, taskFilters: {}, page: 1, currentCustomer: null, pendingImportFile: null, selectedCustomers: new Set(), selectedView: '', calendarMonth: '', selectedTaskDate: '' };
 const labels = {
-  new: 'جديد', contacted: 'تم التواصل', interested: 'مهتم', not_interested: 'غير مهتم',
+  new: 'جديد', contacted: 'تم التواصل', appointment_scheduled: 'تم تحديد موعد', interested: 'مهتم', not_interested: 'غير مهتم',
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
   open: 'مفتوحة', done: 'مكتملة', admin: 'مسؤول', manager: 'مدير', member: 'عضو فريق',
 };
@@ -134,7 +134,7 @@ function statCard(title, metric, hint = '') {
 function badge(status) {
   const safe = escapeHtml(status || '—');
   let type = 'neutral';
-  if (['active', 'done', 'interested'].includes(status)) type = 'active';
+  if (['active', 'done', 'appointment_scheduled', 'interested'].includes(status)) type = 'active';
   if (['trial', 'open', 'contacted'].includes(status)) type = 'warning';
   if (['expired', 'canceled', 'past_due', 'not_interested'].includes(status)) type = 'danger';
   return `<span class="badge ${type}">${escapeHtml(labels[status] || safe)}</span>`;
@@ -194,7 +194,7 @@ async function renderReports() {
   const report = await request('/api/reports/summary');
   const reportGroup = (title, rows) => `<section class="panel"><div class="panel-head"><h2>${title}</h2></div><div class="panel-body report-list">${rows.length ? rows.map((row) => `<div class="report-row"><span>${escapeHtml(labels[row.label] || row.label || 'غير محدد')}</span><strong>${escapeHtml(row.total)}</strong></div>`).join('') : '<div class="empty">لا توجد بيانات بعد.</div>'}</div></section>`;
   const performanceRows = report.team_performance.length ? report.team_performance.map((row) => `<tr><td>${escapeHtml(row.owner_name)}</td><td>${escapeHtml(row.customers)}</td><td>${escapeHtml(row.overdue_tasks)}</td><td>${escapeHtml(row.advanced_customers)} (${escapeHtml(row.conversion_rate)}%)</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty">لا توجد بيانات أداء بعد.</div></td></tr>';
-  app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div><section class="panel"><div class="panel-head"><h2>أداء الفريق</h2><span class="muted">التحويل = العملاء في مرحلتي تم التواصل أو مهتم ÷ إجمالي العملاء</span></div><div class="table-wrap"><table><thead><tr><th>المسؤول</th><th>العملاء</th><th>المتابعات المتأخرة</th><th>التحويل إلى تم التواصل أو مهتم</th></tr></thead><tbody>${performanceRows}</tbody></table></div></section>`, 'reports', 'التقارير');
+  app.innerHTML = shell(`${pageHead('التقارير', 'ملخص توزيع العملاء حسب مرحلة المتابعة والاشتراك والباقة.', '<a class="btn" href="/api/customers/export.csv">تصدير العملاء CSV</a>')}<div class="stats">${statCard('إجمالي العملاء', report.total)}${statCard('اشتراكات نشطة', report.active_subscriptions)}</div><div class="grid-two">${reportGroup('مراحل المتابعة', report.stages)}${reportGroup('حالات الاشتراك', report.subscriptions)}${reportGroup('الباقات', report.plans)}</div><section class="panel"><div class="panel-head"><h2>أداء الفريق</h2><span class="muted">التحويل = العملاء في مراحل تم التواصل أو تحديد موعد أو مهتم ÷ إجمالي العملاء</span></div><div class="table-wrap"><table><thead><tr><th>المسؤول</th><th>العملاء</th><th>المتابعات المتأخرة</th><th>التحويل إلى مراحل المتابعة المتقدمة</th></tr></thead><tbody>${performanceRows}</tbody></table></div></section>`, 'reports', 'التقارير');
   bindShell();
 }
 
@@ -329,7 +329,7 @@ function bulkToolbarMarkup(members) {
   if (!canEditCustomers()) return '';
   const memberOptions = members.filter((member) => member.is_active).map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
   const assignmentField = canViewAllCustomers() ? `<div class="field"><label for="bulk-assignee">المسؤول الجديد</label><select id="bulk-assignee"><option value="">بدون تغيير</option><option value="none">غير معين</option>${memberOptions}</select></div>` : '';
-  const stageOptions = ['new', 'contacted', 'interested', 'not_interested'].map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
+  const stageOptions = ['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'].map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
   return `<div class="toolbar bulk-toolbar"><label><input id="select-visible-customers" type="checkbox"> تحديد الصفحة</label><span>${state.selectedCustomers.size} محدد</span><div class="field"><label for="bulk-stage">المرحلة الجديدة</label><select id="bulk-stage"><option value="">بدون تغيير</option>${stageOptions}</select></div>${assignmentField}<button class="btn primary" type="button" data-action="bulk-update" ${state.selectedCustomers.size ? '' : 'disabled'}>تطبيق على المحدد</button></div>`;
 }
 
@@ -703,7 +703,7 @@ function selectOptions(options, selected, getOptionLabel = (option) => option.na
 function customerFields(customer = {}, tagOptions = []) {
   const field = (name, label, type = 'text') => `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${escapeHtml(customer[name] ?? '')}" ${name === 'name' || name === 'email' ? 'required' : ''}></div>`;
   return `<div class="form-grid">${field('name', 'اسم العميل')}${field('email', 'البريد الإلكتروني', 'email')}${field('phone', 'رقم الهاتف', 'tel')}${field('company_url', 'رابط الشركة', 'url')}${field('plan', 'الباقة')}${field('subscription_status', 'حالة الاشتراك')}${field('billing_cycle', 'دورة الفوترة')}${field('payment_status', 'حالة الدفع')}
-    <div class="field"><label for="f-crm_stage">مرحلة المتابعة</label><select id="f-crm_stage" name="crm_stage">${selectOptions(['new', 'contacted', 'interested', 'not_interested'].map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new')}</select></div>
+    <div class="field"><label for="f-crm_stage">مرحلة المتابعة</label><select id="f-crm_stage" name="crm_stage">${selectOptions(['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'].map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new')}</select></div>
     <div class="field"><label for="f-assigned_to">المسؤول</label><select id="f-assigned_to" name="assigned_to"><option value="">غير معين</option>${selectOptions(state.team.filter((member) => member.is_active), customer.assigned_to)}</select></div>${field('lead_source', 'مصدر العميل')}${field('campaign', 'الحملة')}${field('registered_at', 'تاريخ التسجيل', 'date')}${field('last_amount', 'آخر مبلغ', 'number')}<div class="field full"><label for="f-tags_text">الوسوم</label><input id="f-tags_text" name="tags_text" list="tag-suggestions" value="${escapeHtml((customer.tags || []).map((tag) => tag.name).join(', '))}" placeholder="مثال: أولوية عالية، حملة الصيف"><datalist id="tag-suggestions">${tagOptions.map((tag) => `<option value="${escapeHtml(tag.name)}"></option>`).join('')}</datalist><small class="muted">افصل بين الوسوم بفاصلة. حتى 20 وسمًا، بحد أقصى 40 حرفًا لكل وسم.</small></div></div><div data-error></div><div class="form-actions"><button class="btn primary" type="submit">حفظ العميل</button><button class="btn" type="button" data-cancel>إلغاء</button></div>`;
 }
 

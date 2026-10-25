@@ -10,7 +10,7 @@ final class CustomerService
         'service_count', 'crm_stage', 'assigned_to', 'last_activity_at', 'error_count',
     ];
 
-    private const STAGES = ['new', 'contacted', 'interested', 'not_interested'];
+    private const STAGES = ['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'];
 
     public static function list(PDO $db, array $requestQuery, array $user): never
     {
@@ -185,7 +185,7 @@ final class CustomerService
         $scope = CustomerAccess::canViewAll($user) ? '' : ' WHERE c.assigned_to = ?';
         $params = [gmdate('Y-m-d H:i:s')];
         if (!CustomerAccess::canViewAll($user)) $params[] = (int) $user['id'];
-        $query = $db->prepare("SELECT c.assigned_to, COALESCE(u.name, 'غير معين') AS owner_name, COUNT(*) AS customers, SUM(CASE WHEN c.crm_stage IN ('contacted', 'interested') THEN 1 ELSE 0 END) AS advanced_customers, SUM(CASE WHEN EXISTS (SELECT 1 FROM follow_up_tasks t WHERE t.customer_id = c.id AND t.status = 'open' AND t.due_at < ?) THEN 1 ELSE 0 END) AS overdue_tasks FROM customers c LEFT JOIN users u ON u.id = c.assigned_to" . $scope . ' GROUP BY c.assigned_to, u.name ORDER BY customers DESC, owner_name');
+        $query = $db->prepare("SELECT c.assigned_to, COALESCE(u.name, 'غير معين') AS owner_name, COUNT(*) AS customers, SUM(CASE WHEN c.crm_stage IN ('contacted', 'appointment_scheduled', 'interested') THEN 1 ELSE 0 END) AS advanced_customers, SUM(CASE WHEN EXISTS (SELECT 1 FROM follow_up_tasks t WHERE t.customer_id = c.id AND t.status = 'open' AND t.due_at < ?) THEN 1 ELSE 0 END) AS overdue_tasks FROM customers c LEFT JOIN users u ON u.id = c.assigned_to" . $scope . ' GROUP BY c.assigned_to, u.name ORDER BY customers DESC, owner_name');
         $query->execute($params);
         $rows = $query->fetchAll();
         foreach ($rows as &$row) {
