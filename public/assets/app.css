@@ -499,6 +499,7 @@ tbody tr:hover {
 }
 .form-actions {
   display:flex;
+  flex-wrap:wrap;
   justify-content:flex-start;
   gap:9px;
   margin-top:18px

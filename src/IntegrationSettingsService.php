@@ -39,6 +39,27 @@ final class IntegrationSettingsService
         Http::json(['configured' => true, 'source_url' => $sourceUrl, 'credentials_configured' => true]);
     }
 
+    public static function connectionDetails(PDO $db): array
+    {
+        $settings = self::find($db);
+        if ($settings === null) {
+            Http::json(['error' => 'integration_not_configured', 'message' => 'احفظ بيانات الاتصال أولًا.'], 409);
+        }
+        try {
+            $credentials = json_decode(SecretCipher::decrypt($settings['credentials_ciphertext']), true, 4, JSON_THROW_ON_ERROR);
+        } catch (JsonException | RuntimeException) {
+            Http::json(['error' => 'credentials_unreadable', 'message' => 'تعذر قراءة بيانات الاتصال؛ أعد حفظها ثم حاول مرة أخرى.'], 409);
+        }
+        if (!is_array($credentials) || !is_string($credentials['username'] ?? null) || !is_string($credentials['password'] ?? null)) {
+            Http::json(['error' => 'credentials_unreadable', 'message' => 'بيانات الاتصال المحفوظة غير مكتملة.'], 409);
+        }
+        return [
+            'source_url' => $settings['source_url'],
+            'username' => $credentials['username'],
+            'password' => $credentials['password'],
+        ];
+    }
+
     private static function validatedSourceUrl(array $requestFields): string
     {
         $sourceUrl = Http::requiredString($requestFields, 'source_url', 2048);

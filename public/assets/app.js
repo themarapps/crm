@@ -176,7 +176,7 @@ async function renderIntegrationSettings() {
 
 function integrationSettingsMarkup(settings) {
   const notice = settings.encryption_ready
-    ? '<div class="notice integration-note">بيانات الدخول تحفظ مشفرة، ولا يعرض النظام كلمة المرور بعد الحفظ. هذه الصفحة تحفظ بيانات الاتصال؛ تفعيل المزامنة يحتاج ربط آلية المصدر.</div>'
+    ? '<div class="notice integration-note">بيانات الدخول تحفظ مشفرة، ولا يعرض النظام كلمة المرور بعد الحفظ. المزامنة تحدّث بيانات المصدر وتُبقي مراحل المتابعة والملاحظات والمهام.</div>'
     : '<div class="error integration-note">يلزم إعداد مفتاح التشفير على الخادم قبل حفظ بيانات الدخول.</div>';
   const status = settings.credentials_configured ? 'بيانات محفوظة' : 'غير مكتمل';
   const userPlaceholder = settings.credentials_configured ? 'اتركه فارغًا للإبقاء على الحالي' : 'اسم المستخدم';
@@ -186,11 +186,12 @@ function integrationSettingsMarkup(settings) {
     <form id="integration-form"><div class="form-grid"><div class="field full"><label for="source-url">الرابط الأساسي للمصدر</label><input id="source-url" name="source_url" type="url" value="${escapeHtml(settings.source_url)}" placeholder="https://example.com" required></div>
     <div class="field"><label for="source-username">اسم المستخدم</label><input id="source-username" name="username" autocomplete="username" placeholder="${userPlaceholder}"></div>
     <div class="field"><label for="source-password">كلمة المرور</label><input id="source-password" name="password" type="password" autocomplete="new-password" placeholder="${passwordPlaceholder}"></div></div>
-    <div id="integration-status" aria-live="polite"></div><div class="form-actions"><button class="btn primary" type="submit" ${settings.encryption_ready ? '' : 'disabled'}>حفظ بيانات الربط</button></div></form></div></section>`;
+    <div id="integration-status" aria-live="polite"></div><div id="sync-status" aria-live="polite"></div><div class="form-actions"><button class="btn primary" type="submit" ${settings.encryption_ready ? '' : 'disabled'}>حفظ بيانات الربط</button><button class="btn" type="button" data-source-sync ${settings.credentials_configured ? '' : 'disabled'}>مزامنة الآن</button></div></form></div></section>`;
 }
 
 function bindIntegrationForm() {
   document.querySelector('#integration-form').addEventListener('submit', saveIntegrationSettings);
+  document.querySelector('[data-source-sync]').addEventListener('click', syncSourceCustomers);
 }
 
 async function saveIntegrationSettings(event) {
@@ -202,11 +203,30 @@ async function saveIntegrationSettings(event) {
     await request('/api/settings/source', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
     form.elements.password.value = '';
     form.elements.username.value = '';
+    form.querySelector('[data-source-sync]').disabled = false;
     document.querySelector('#integration-status').innerHTML = '<div class="notice">تم حفظ بيانات الربط بشكل مشفر.</div>';
   } catch (error) {
     document.querySelector('#integration-status').innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
   } finally {
     button.disabled = false;
+  }
+}
+
+async function syncSourceCustomers(event) {
+  const button = event.currentTarget;
+  const status = document.querySelector('#sync-status');
+  button.disabled = true;
+  button.textContent = 'جارٍ جلب العملاء…';
+  status.innerHTML = '<div class="notice">جارٍ الاتصال بالمصدر وقراءة العملاء. قد تستغرق العملية بعض الوقت.</div>';
+  try {
+    const result = await request('/api/settings/source/sync', { method: 'POST', body: '{}' });
+    const details = result.errors.length ? `<div class="muted">ملاحظات: ${result.errors.map(escapeHtml).join('، ')}</div>` : '';
+    status.innerHTML = `<div class="notice">اكتملت المزامنة: ${escapeHtml(result.created)} عميل جديد، ${escapeHtml(result.updated)} تحديث، ${escapeHtml(result.skipped)} متخطى من أصل ${escapeHtml(result.total)}.${details}</div>`;
+  } catch (error) {
+    status.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'مزامنة الآن';
   }
 }
 

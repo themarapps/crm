@@ -45,6 +45,7 @@ token returned by `GET /api/csrf` in the `X-CSRF-Token` header.
 - `GET /api/dashboard` — counts and upcoming/overdue follow-ups scoped to the signed-in member
 - `GET /api/reports/summary` — customer totals grouped by stage, subscription status, and plan (manager/admin)
 - `GET|PUT /api/settings/source` — administrator-only external source connection settings; credentials are encrypted at rest
+- `POST /api/settings/source/sync` — administrator-only customer sync from the configured source, matched by normalized email
 - `GET|POST /api/customers`
 - `GET /api/customers/export.csv` — exports matching filters (manager/admin; maximum 10,000 rows)
 - `GET /api/customers/options` — distinct filter options from saved customers
@@ -81,8 +82,9 @@ in the customer activity history.
 The external source settings page stores the source base URL and encrypted login
 credentials. The 32-byte key at `storage/integration-encryption.key` must be provisioned
 outside Git as a root-owned `0640` file with the CRM PHP-FPM group, and backed up
-separately from the database dump. Saving credentials does not start a sync until a
-source connector is configured.
+separately from the database dump. The administrator can trigger a paginated source sync
+from this page. Existing customers are matched by normalized email and only imported
+account fields are updated; CRM stages, assignments, notes, and follow-up tasks remain.
 
 CSV rows are matched by normalized email. The interface previews a file before
 the user confirms the import. Arabic headers from the supplied export

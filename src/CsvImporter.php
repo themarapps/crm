@@ -45,6 +45,28 @@ final class CsvImporter
         Http::json(self::previewRows($db, $csvRows));
     }
 
+    public static function importSourceRecords(PDO $db, array $records, int $actorId): array
+    {
+        if (count($records) > self::MAX_ROWS) {
+            throw new RuntimeException('تجاوز عدد العملاء الحد المسموح للاستيراد.');
+        }
+        $rows = [];
+        foreach ($records as $index => $record) {
+            if (is_array($record)) $rows[] = self::normalizeSourceRecord($record, $index + 1);
+        }
+        return self::importRows($db, $rows, $actorId);
+    }
+
+    private static function normalizeSourceRecord(array $record, int $line): array
+    {
+        $row = array_intersect_key($record, array_flip(self::CUSTOMER_FIELDS));
+        $row['_line'] = $line;
+        $row['name'] = trim((string) ($row['name'] ?? ''));
+        $row['email'] = strtolower(trim((string) ($row['email'] ?? '')));
+        $row['phone'] = self::normalizePhone(isset($row['phone']) ? (string) $row['phone'] : null);
+        return $row;
+    }
+
     private static function readUploadedCsv(array $uploadedFile): array
     {
         self::validateUploadedFile($uploadedFile);

@@ -12,6 +12,8 @@ require_once dirname(__DIR__) . '/src/TaskService.php';
 require_once dirname(__DIR__) . '/src/TeamService.php';
 require_once dirname(__DIR__) . '/src/SecretCipher.php';
 require_once dirname(__DIR__) . '/src/IntegrationSettingsService.php';
+require_once dirname(__DIR__) . '/src/SourceCustomerClient.php';
+require_once dirname(__DIR__) . '/src/SourceSyncService.php';
 require_once dirname(__DIR__) . '/src/DashboardService.php';
 require_once dirname(__DIR__) . '/src/Time.php';
 
@@ -84,6 +86,10 @@ try {
     if ($path === '/api/settings/source' && $method === 'PUT') {
         Auth::requireAdmin($user);
         IntegrationSettingsService::save($db, Http::body());
+    }
+    if ($path === '/api/settings/source/sync' && $method === 'POST') {
+        Auth::requireAdmin($user);
+        SourceSyncService::sync($db, (int) $user['id']);
     }
     if ($path === '/api/customers' && $method === 'GET') {
         CustomerService::list($db, $_GET, $user);
