@@ -1480,3 +1480,18 @@ td::before {
   .calendar-grid { gap:3px }
   .calendar-day { min-height:56px;padding:5px }
 }
+
+.customer-content-grid { grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr) }
+.customer-tasks-panel .panel-head,.customer-notes-panel .panel-head,.customer-activity-panel .panel-head { min-height:64px }
+.customer-activity-panel .task-row { align-items:flex-start;padding-block:12px }
+.customer-activity-panel .task-row > div { min-width:0 }
+.customer-activity-panel .task-row strong { color:#172338;font-size:12px;line-height:1.7 }
+.customer-activity-panel .task-row small { display:block;margin-top:4px;color:var(--muted);font-size:10px }
+
+@media(min-width:1200px) {
+  .customer-activity-panel .panel-body { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px }
+}
+
+@media(max-width:639px) {
+  .customer-content-grid { grid-template-columns:1fr }
+}
