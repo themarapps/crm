@@ -1268,3 +1268,138 @@ td::before {
   .filter-actions { display:grid;grid-template-columns:1fr 1fr }
   .filter-actions .btn { min-height:42px;padding-inline:8px;font-size:11px }
 }
+
+/* Secondary screens use the same card rhythm, plum actions, and compact hierarchy. */
+.content > .page-head + .stats:not(.dashboard-stats) { grid-template-columns:repeat(2,minmax(0,1fr));max-width:760px }
+.report-stats { margin-bottom:18px }
+.report-groups { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:14px;margin-bottom:18px }
+.report-card { margin:0 }
+.report-card .panel-head,.report-performance .panel-head,.team-list-panel .panel-head,.team-audit-panel .panel-head,.import-panel .panel-head,.task-calendar .panel-head { background:#f8f9ff }
+.report-card .panel-head > div,.report-performance .panel-head > div,.team-list-panel .panel-head > div,.team-audit-panel .panel-head > div,.import-panel .panel-head > div { display:grid;gap:4px }
+.report-card .panel-head small,.report-performance .panel-head small,.team-list-panel .panel-head small,.team-audit-panel .panel-head small,.import-panel .panel-head small { font-size:11px }
+.report-list { padding:7px 18px }
+.report-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;padding:13px 0 }
+.report-row-copy { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 8px;min-width:0 }
+.report-row-copy > span:first-child { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0b1c30;font-size:12px;font-weight:600 }
+.report-row-copy small { color:var(--muted);font-size:10px;white-space:nowrap }
+.report-row > strong { grid-column:2;grid-row:1;color:var(--primary);font-size:17px;font-variant-numeric:tabular-nums }
+.report-meter { grid-column:1/-1;height:5px;overflow:hidden;border-radius:99px;background:#e8edf6 }
+.report-meter i { display:block;height:100%;border-radius:inherit;background:var(--green-container) }
+.report-performance { margin-bottom:18px }
+.report-performance .panel-head { align-items:flex-start }
+.report-performance .panel-head small { max-width:560px;line-height:1.7 }
+.conversion-value { display:inline-flex;align-items:center;justify-content:center;min-width:34px;min-height:28px;padding:3px 8px;border-radius:8px;background:var(--surface-low);color:var(--primary);font-weight:700 }
+.conversion-rate { margin-inline-start:8px;color:var(--green);font-size:11px;font-weight:650 }
+.customer-profile-panel .detail-hero { padding:22px 24px;background:linear-gradient(105deg,#fff 30%,#f8f9ff);border-bottom:1px solid var(--line) }
+.customer-profile-panel .detail-hero .avatar { width:54px;height:54px;border-radius:16px;background:#f6eaf4;color:var(--primary);font-size:20px }
+.customer-profile-panel .detail-hero h2 { margin:0;font-size:20px }
+.customer-profile-panel .detail-hero p { margin:5px 0 0;color:var(--muted);font-size:12px }
+.customer-profile-panel .detail-grid { gap:12px }
+.customer-profile-panel .detail-field { min-height:74px;padding:12px 14px;border:1px solid #edf0f6;border-radius:11px;background:#fff }
+.customer-profile-panel .detail-field > small { color:var(--muted);font-size:11px }
+.customer-profile-panel .detail-field > strong { margin-top:6px;color:#0b1c30;font-size:13px }
+.customer-content-grid { gap:16px }
+.customer-content-grid .panel-head,.customer-activity-panel .panel-head { background:#f8f9ff }
+.customer-notes-panel #note-form { margin-bottom:18px;padding:14px;border:1px solid #edf0f6;border-radius:12px;background:#fbfcff }
+.note-save-button { margin-top:10px }
+.customer-tasks-panel .panel-body,.customer-activity-panel .panel-body { padding-top:8px }
+.task-filter-panel { margin-bottom:16px }
+.task-filter-form { display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;align-items:end;gap:14px;padding:18px 20px;border:0;background:#fff }
+.task-filter-heading { grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:14px }
+.task-filter-heading h2 { margin:0;color:#0b1c30;font-size:15px }
+.task-filter-heading p { margin:4px 0 0;color:var(--muted);font-size:11px }
+.task-filter-form .field select { min-height:44px;border-color:#c8d0df;border-radius:10px }
+.task-filter-actions { display:flex;align-items:center;gap:8px }
+.task-filter-actions .btn { min-height:42px;padding-inline:18px }
+.task-calendar .panel-head { min-height:66px }
+.task-calendar .panel-body { padding:18px 20px }
+.calendar-grid { gap:7px }
+.calendar-day { min-height:82px;border-radius:10px;padding:9px;background:#fff }
+.calendar-day.today:not(.selected) { background:#f3fbf7;border-color:#8ccdb0 }
+.calendar-day.selected { background:#f6eef7 }
+.task-sections { grid-template-columns:repeat(4,minmax(0,1fr));gap:14px }
+.task-status-panel { margin:0 }
+.task-status-panel .panel-head { border-inline-start:4px solid #c8d0df }
+.task-status-overdue .panel-head { border-inline-start-color:var(--red) }
+.task-status-today .panel-head { border-inline-start-color:#d99a3d }
+.task-status-upcoming .panel-head { border-inline-start-color:#6e9de0 }
+.task-status-done .panel-head { border-inline-start-color:var(--green) }
+.task-status-panel .panel-body { padding:8px 18px }
+.integration-panel { max-width:1000px }
+.integration-panel .panel-head { min-height:66px }
+.integration-panel .panel-body { padding:22px }
+.integration-panel #integration-form { max-width:850px }
+.integration-panel .form-grid { gap:16px }
+.integration-panel .form-actions { padding-top:16px;border-top:1px solid #edf0f6 }
+.integration-note { display:flex;align-items:flex-start;gap:12px;max-width:1000px;margin:0 0 18px;padding:14px 16px;border:1px solid #bce9d5;border-radius:12px;background:#edfbf4;color:#005137 }
+.integration-note.error { border-color:#f1c2bd;background:#fff3f1;color:#93000a }
+.integration-note .section-icon { flex:none;width:34px;height:34px }
+.integration-note > span:last-child { display:grid;gap:4px;line-height:1.65 }
+.integration-note strong { font-size:12px }
+.integration-note small { font-size:11px }
+.import-panel { max-width:1100px }
+.import-panel .panel-body { padding:22px }
+.import-format-badge { display:inline-flex;align-items:center;justify-content:center;min-width:50px;min-height:34px;padding:5px 10px;border-radius:9px;background:#e7efff;color:#244a79;font-size:12px;font-weight:750;letter-spacing:.04em }
+.import-overview { display:flex;align-items:flex-start;gap:12px;margin-bottom:18px;padding:14px 16px;border:1px solid #dfe8fa;border-radius:12px;background:#f8faff }
+.import-overview > div { display:grid;gap:4px }
+.import-overview strong { color:#0b1c30;font-size:13px }
+.import-overview p { margin:0;color:var(--muted);font-size:11px;line-height:1.7 }
+.import-steps { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px }
+.import-steps > div { display:flex;align-items:center;gap:9px;min-height:42px;padding:7px 10px;border-radius:10px;background:#f8f9ff;color:#4f5968;font-size:11px }
+.import-steps > div > span { display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#e5eeff;color:var(--primary);font-size:11px;font-weight:700 }
+.dropzone { display:grid;justify-items:center;gap:8px;margin-top:4px;padding:30px 20px;border:1.5px dashed #bca5be;border-radius:14px;background:#fbf8fc;cursor:pointer }
+.dropzone:hover { border-color:var(--primary);background:#f8f2f9 }
+.dropzone-icon { display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:#f1e6f2;color:var(--primary) }
+.dropzone-icon .nav-icon { width:24px;height:24px }
+.dropzone-limit { font-size:11px }
+.dropzone input { margin-top:5px;max-width:100%;font-size:12px }
+.import-preview-button { margin-top:14px }
+#import-result > .stats { margin-top:18px }
+#import-result > .panel { margin-top:16px }
+.team-list-panel .panel-head { min-height:66px }
+.team-count { display:grid;gap:2px;text-align:left }
+.team-count strong { color:var(--primary);font-size:19px;font-variant-numeric:tabular-nums }
+.team-count span { color:var(--muted);font-size:10px }
+.team-list-panel .table-wrap { border-top:0 }
+.team-audit-panel .panel-body { padding-top:8px }
+.team-audit-panel .task-row { padding:14px 0 }
+
+@media(max-width:1100px) {
+  .report-groups { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  .task-sections { grid-template-columns:repeat(2,minmax(0,1fr)) }
+}
+
+@media(max-width:639px) {
+  .content > .page-head + .stats:not(.dashboard-stats) { grid-template-columns:repeat(2,minmax(0,1fr));gap:9px }
+  .report-groups { grid-template-columns:1fr;gap:11px }
+  .report-card .panel-body { padding-inline:13px }
+  .report-performance .panel-head { align-items:flex-start;flex-direction:column }
+  .customer-profile-panel .detail-hero { gap:10px;padding:16px }
+  .customer-profile-panel .detail-hero h2 { font-size:17px }
+  .customer-profile-panel .detail-grid { grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:13px }
+  .customer-profile-panel .detail-field { min-height:68px;padding:10px }
+  .customer-content-grid { gap:11px }
+  .task-filter-form { grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:14px }
+  .task-filter-heading { align-items:flex-start }
+  .task-filter-form .field select { min-height:42px;font-size:12px }
+  .task-filter-actions { grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr }
+  .task-filter-actions .btn { min-height:42px;padding-inline:8px;font-size:11px }
+  .task-calendar .panel-body { padding:13px }
+  .calendar-grid { gap:4px }
+  .calendar-day { min-height:62px;padding:6px;border-radius:8px }
+  .calendar-weekdays { font-size:10px }
+  .calendar-day small { font-size:9px }
+  .task-sections { grid-template-columns:1fr;gap:11px }
+  .integration-panel .panel-body,.import-panel .panel-body { padding:15px }
+  .integration-panel .form-grid { grid-template-columns:1fr }
+  .integration-panel .field.full { grid-column:auto }
+  .integration-panel .form-actions { align-items:stretch;flex-direction:column }
+  .integration-panel .form-actions .btn { width:100% }
+  .integration-note { padding:12px }
+  .import-steps { gap:6px }
+  .import-steps > div { justify-content:center;gap:5px;padding:6px 5px;font-size:9px }
+  .import-steps > div > span { width:21px;height:21px;flex:none }
+  .team-list-panel .panel-head,.team-audit-panel .panel-head { padding:13px }
+  .team-count { text-align:right }
+  .team-count strong { font-size:16px }
+}
