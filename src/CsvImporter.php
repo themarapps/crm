@@ -242,7 +242,7 @@ final class CsvImporter
 
     private static function importRow(PDO $db, array $csvRow, array $emailCounts, int $actorId, bool $skipUnchanged): array
     {
-        $outcome = self::classifyRow($db, $csvRow, $emailCounts);
+        $outcome = self::classifyRow($db, $csvRow, $emailCounts, $skipUnchanged);
         if ($outcome['status'] === 'skipped') {
             return $outcome;
         }
@@ -255,7 +255,7 @@ final class CsvImporter
         return $outcome;
     }
 
-    private static function classifyRow(PDO $db, array $csvRow, array $emailCounts): array
+    private static function classifyRow(PDO $db, array $csvRow, array $emailCounts, bool $includeImportedFields = false): array
     {
         $email = $csvRow['email'] ?? '';
         $line = (int) $csvRow['_line'];
@@ -263,9 +263,11 @@ final class CsvImporter
         if ($rejection !== null) {
             return ['status' => 'skipped', 'reason' => $rejection, 'email' => $email, 'line' => $line];
         }
-        $existing = self::existingCustomer($db, $email);
+        $existing = self::existingCustomer($db, $email, $includeImportedFields);
         if ($existing === null) return ['status' => 'created', 'email' => $email, 'line' => $line, 'customer_id' => null];
-        return ['status' => 'updated', 'email' => $email, 'line' => $line, 'customer_id' => (int) $existing['id'], 'existing_customer' => $existing];
+        $outcome = ['status' => 'updated', 'email' => $email, 'line' => $line, 'customer_id' => (int) $existing['id']];
+        if ($includeImportedFields) $outcome['existing_customer'] = $existing;
+        return $outcome;
     }
 
     private static function rowRejection(array $csvRow, array $emailCounts): ?string
@@ -280,9 +282,9 @@ final class CsvImporter
         return trim((string) ($csvRow['name'] ?? '')) === '' ? 'اسم العميل مفقود.' : null;
     }
 
-    private static function existingCustomer(PDO $db, string $email): ?array
+    private static function existingCustomer(PDO $db, string $email, bool $includeImportedFields = false): ?array
     {
-        $columns = implode(', ', array_merge(['id'], self::CUSTOMER_FIELDS));
+        $columns = $includeImportedFields ? implode(', ', array_merge(['id'], self::CUSTOMER_FIELDS)) : 'id';
         $customerQuery = $db->prepare('SELECT ' . $columns . ' FROM customers WHERE email = ?');
         $customerQuery->execute([$email]);
         return $customerQuery->fetch() ?: null;
