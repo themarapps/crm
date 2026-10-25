@@ -6,10 +6,15 @@ final class TaskService
     public static function list(PDO $db, array $requestQuery, array $user): never
     {
         $filters = self::listFilters($requestQuery);
-        if ($user['role'] === 'member') {
-            $filters['conditions'][] = '(t.assignee_id = ? OR c.assigned_to = ?)';
-            $filters['params'][] = (int) $user['id'];
-            $filters['params'][] = (int) $user['id'];
+        if (!CustomerAccess::canViewAll($user)) {
+            if ($user['role'] === 'member') {
+                $filters['conditions'][] = '(t.assignee_id = ? OR c.assigned_to = ?)';
+                $filters['params'][] = (int) $user['id'];
+                $filters['params'][] = (int) $user['id'];
+            } else {
+                $filters['conditions'][] = 'c.assigned_to = ?';
+                $filters['params'][] = (int) $user['id'];
+            }
         }
         $sql = self::listSql($filters['conditions']);
         $taskQuery = $db->prepare($sql);
@@ -58,13 +63,18 @@ final class TaskService
 
     public static function save(PDO $db, array $requestFields, array $user, ?int $taskId = null): never
     {
+        CustomerAccess::requireEdit($user);
         $actorId = (int) $user['id'];
-        if ($user['role'] === 'member') {
-            $customerId = self::optionalId($requestFields, 'customer_id');
-            if (!$customerId || !self::memberCanSaveTask($db, $customerId, $taskId, $actorId)) Http::json(['error' => 'not_found'], 404);
-            $requestFields['assignee_id'] = $actorId;
-        }
         $taskFields = self::validatedTaskFields($db, $requestFields);
+        if ($taskId !== null) {
+            $existingTask = self::findTaskAccessFields($db, $taskId);
+            $existingCustomer = $existingTask ? self::findCustomerAccessFields($db, (int) $existingTask['customer_id']) : null;
+            if (!$existingTask || !$existingCustomer || !CustomerAccess::canAccess($existingCustomer, $user)) Http::json(['error' => 'not_found'], 404);
+            if ($user['role'] === 'member' && !self::memberCanSaveTask($db, $taskFields['customer_id'], $taskId, $actorId)) Http::json(['error' => 'not_found'], 404);
+        }
+        $targetCustomer = self::findCustomerAccessFields($db, $taskFields['customer_id']);
+        if (!$targetCustomer || !CustomerAccess::canAccess($targetCustomer, $user)) Http::json(['error' => 'not_found'], 404);
+        if ($user['role'] === 'member') $taskFields['assignee_id'] = $actorId;
         $savedTaskId = self::persistTask($db, $taskFields, $actorId, $taskId);
         $taskQuery = $db->prepare('SELECT * FROM follow_up_tasks WHERE id = ?');
         $taskQuery->execute([$savedTaskId]);
@@ -78,6 +88,20 @@ final class TaskService
         $query = $db->prepare('SELECT 1 FROM customers WHERE id = ? AND assigned_to = ?');
         $query->execute([$customerId, $userId]);
         return (bool) $query->fetchColumn();
+    }
+
+    private static function findTaskAccessFields(PDO $db, int $taskId): ?array
+    {
+        $query = $db->prepare('SELECT customer_id FROM follow_up_tasks WHERE id = ?');
+        $query->execute([$taskId]);
+        return $query->fetch() ?: null;
+    }
+
+    private static function findCustomerAccessFields(PDO $db, int $customerId): ?array
+    {
+        $query = $db->prepare('SELECT id, assigned_to FROM customers WHERE id = ?');
+        $query->execute([$customerId]);
+        return $query->fetch() ?: null;
     }
 
     private static function memberCanSaveTask(PDO $db, int $customerId, ?int $taskId, int $userId): bool

@@ -24,8 +24,21 @@ final class CustomerService
             'params' => $queryParams,
             'page' => $page,
             'page_size' => $pageSize,
+            'sort' => self::sortOrder($requestQuery),
         ]);
         Http::json(['data' => $customers, 'page' => $page, 'per_page' => $pageSize, 'total' => $total]);
+    }
+
+    private static function sortOrder(array $requestQuery): string
+    {
+        $columns = [
+            'name' => 'name', 'phone' => 'phone', 'plan' => 'plan', 'subscription_status' => 'subscription_status',
+            'crm_stage' => 'crm_stage', 'assigned_to' => 'assigned_to', 'registered_at' => 'registered_at',
+            'updated_at' => 'updated_at',
+        ];
+        $column = $columns[self::queryString($requestQuery, 'sort')] ?? 'updated_at';
+        $direction = strtolower(self::queryString($requestQuery, 'direction')) === 'asc' ? 'ASC' : 'DESC';
+        return $column . ' ' . $direction . ', id DESC';
     }
 
     private static function listConditions(array $requestQuery, array $user): array
@@ -36,7 +49,7 @@ final class CustomerService
         [$exactConditions, $exactParams] = self::exactConditions($requestQuery);
         $conditions = array_merge($searchConditions, $exactConditions);
         $queryParams = array_merge($searchParams, $exactParams);
-        if ($user['role'] === 'member') {
+        if (!CustomerAccess::canViewAll($user)) {
             $conditions[] = 'assigned_to = ?';
             $queryParams[] = (int) $user['id'];
         }
@@ -58,13 +71,28 @@ final class CustomerService
     {
         $conditions = [];
         $queryParams = [];
-        foreach (['subscription_status' => 'subscription_status', 'plan' => 'plan', 'stage' => 'crm_stage', 'assigned_to' => 'assigned_to'] as $filter => $column) {
+        foreach (['subscription_status' => 'subscription_status', 'payment_status' => 'payment_status', 'plan' => 'plan', 'stage' => 'crm_stage', 'assigned_to' => 'assigned_to'] as $filter => $column) {
             $filterValue = self::queryString($requestQuery, $filter);
             if ($filterValue === '') {
                 continue;
             }
             $conditions[] = $column . ' = ?';
             $queryParams[] = $filterValue;
+        }
+        foreach (['lead_source' => 'lead_source', 'campaign' => 'campaign'] as $filter => $column) {
+            $filterValue = self::queryString($requestQuery, $filter);
+            if ($filterValue === '') continue;
+            $conditions[] = '(SELECT ca.' . $column . ' FROM customer_attribution ca WHERE ca.customer_id = customers.id) = ?';
+            $queryParams[] = $filterValue;
+        }
+        $tagId = self::queryString($requestQuery, 'tag');
+        if ($tagId !== '') {
+            if (ctype_digit($tagId) && (int) $tagId > 0) {
+                $conditions[] = 'EXISTS (SELECT 1 FROM customer_tags ct WHERE ct.customer_id = customers.id AND ct.tag_id = ?)';
+                $queryParams[] = (int) $tagId;
+            } else {
+                $conditions[] = '1 = 0';
+            }
         }
         return [$conditions, $queryParams];
     }
@@ -74,13 +102,34 @@ final class CustomerService
         Http::json([
             'plans' => self::distinctValues($db, 'plan', $user),
             'subscription_statuses' => self::distinctValues($db, 'subscription_status', $user),
+            'payment_statuses' => self::distinctValues($db, 'payment_status', $user),
             'stages' => self::distinctValues($db, 'crm_stage', $user),
+            'lead_sources' => self::attributionOptions($db, 'lead_source', $user),
+            'campaigns' => self::attributionOptions($db, 'campaign', $user),
+            'tags' => self::tagOptions($db, $user),
         ]);
+    }
+
+    private static function attributionOptions(PDO $db, string $column, array $user): array
+    {
+        if (!in_array($column, ['lead_source', 'campaign'], true)) return [];
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' AND c.assigned_to = ?';
+        $query = $db->prepare('SELECT DISTINCT ca.' . $column . ' AS value FROM customer_attribution ca JOIN customers c ON c.id = ca.customer_id WHERE ca.' . $column . " IS NOT NULL AND ca." . $column . " != ''" . $scope . ' ORDER BY ca.' . $column . ' LIMIT 100');
+        $query->execute(CustomerAccess::canViewAll($user) ? [] : [(int) $user['id']]);
+        return array_column($query->fetchAll(), 'value');
+    }
+
+    private static function tagOptions(PDO $db, array $user): array
+    {
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' AND c.assigned_to = ?';
+        $query = $db->prepare('SELECT DISTINCT t.id, t.name FROM crm_tags t JOIN customer_tags ct ON ct.tag_id = t.id JOIN customers c ON c.id = ct.customer_id WHERE 1 = 1' . $scope . ' ORDER BY t.name LIMIT 100');
+        $query->execute(CustomerAccess::canViewAll($user) ? [] : [(int) $user['id']]);
+        return $query->fetchAll();
     }
 
     private static function distinctValues(PDO $db, string $column, array $user): array
     {
-        $scope = $user['role'] === 'member' ? ' AND assigned_to = ' . (int) $user['id'] : '';
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' AND assigned_to = ' . (int) $user['id'];
         $query = $db->query('SELECT DISTINCT ' . $column . ' FROM customers WHERE ' . $column . ' IS NOT NULL AND ' . $column . " != ''" . $scope . ' ORDER BY ' . $column . ' LIMIT 100');
         return array_column($query->fetchAll(), $column);
     }
@@ -92,7 +141,7 @@ final class CustomerService
         }
         [$conditions, $params] = self::listConditions($requestQuery, $user);
         $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
-        $query = $db->prepare('SELECT name, email, phone, plan, subscription_status, payment_status, crm_stage, assigned_to, registered_at FROM customers' . $where . ' ORDER BY updated_at DESC, id DESC LIMIT 10000');
+        $query = $db->prepare('SELECT customers.name, customers.email, customers.phone, customers.plan, customers.subscription_status, customers.payment_status, customers.crm_stage, customers.assigned_to, customers.registered_at, (SELECT ca.lead_source FROM customer_attribution ca WHERE ca.customer_id = customers.id), (SELECT ca.campaign FROM customer_attribution ca WHERE ca.customer_id = customers.id) FROM customers' . $where . ' ORDER BY customers.updated_at DESC, customers.id DESC LIMIT 10000');
         $query->execute($params);
         self::writeCustomerExport($query);
         exit;
@@ -105,7 +154,7 @@ final class CustomerService
         header('Cache-Control: no-store');
         $output = fopen('php://output', 'wb');
         fwrite($output, "\xEF\xBB\xBF");
-        fputcsv($output, ['name', 'email', 'phone', 'plan', 'subscription_status', 'payment_status', 'crm_stage', 'assigned_to', 'registered_at']);
+        fputcsv($output, ['name', 'email', 'phone', 'plan', 'subscription_status', 'payment_status', 'crm_stage', 'assigned_to', 'registered_at', 'lead_source', 'campaign']);
         while ($customer = $query->fetch(PDO::FETCH_NUM)) {
             foreach ($customer as &$value) {
                 if (is_string($value) && preg_match('/^[\x00-\x20]*[=+@\-]/', $value)) $value = "'" . $value;
@@ -122,28 +171,52 @@ final class CustomerService
             Http::json(['error' => 'forbidden', 'message' => 'لا تملك صلاحية عرض التقارير.'], 403);
         }
         Http::json([
-            'total' => self::countCustomersForReport($db),
-            'active_subscriptions' => self::countActiveForReport($db),
-            'stages' => self::groupCounts($db, 'crm_stage'),
-            'subscriptions' => self::groupCounts($db, 'subscription_status'),
-            'plans' => self::groupCounts($db, 'plan'),
+            'total' => self::countCustomersForReport($db, $user),
+            'active_subscriptions' => self::countActiveForReport($db, $user),
+            'stages' => self::groupCounts($db, 'crm_stage', $user),
+            'subscriptions' => self::groupCounts($db, 'subscription_status', $user),
+            'plans' => self::groupCounts($db, 'plan', $user),
+            'team_performance' => self::teamPerformance($db, $user),
         ]);
     }
 
-    private static function countCustomersForReport(PDO $db): int
+    private static function teamPerformance(PDO $db, array $user): array
     {
-        return (int) $db->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' WHERE c.assigned_to = ?';
+        $params = [gmdate('Y-m-d H:i:s')];
+        if (!CustomerAccess::canViewAll($user)) $params[] = (int) $user['id'];
+        $query = $db->prepare("SELECT c.assigned_to, COALESCE(u.name, 'غير معين') AS owner_name, COUNT(*) AS customers, SUM(CASE WHEN c.crm_stage IN ('contacted', 'interested') THEN 1 ELSE 0 END) AS advanced_customers, SUM(CASE WHEN EXISTS (SELECT 1 FROM follow_up_tasks t WHERE t.customer_id = c.id AND t.status = 'open' AND t.due_at < ?) THEN 1 ELSE 0 END) AS overdue_tasks FROM customers c LEFT JOIN users u ON u.id = c.assigned_to" . $scope . ' GROUP BY c.assigned_to, u.name ORDER BY customers DESC, owner_name');
+        $query->execute($params);
+        $rows = $query->fetchAll();
+        foreach ($rows as &$row) {
+            $total = (int) $row['customers'];
+            $row['conversion_rate'] = $total > 0 ? round(((int) $row['advanced_customers'] / $total) * 100, 1) : 0;
+        }
+        unset($row);
+        return $rows;
     }
 
-    private static function countActiveForReport(PDO $db): int
+    private static function countCustomersForReport(PDO $db, array $user): int
     {
-        return (int) $db->query("SELECT COUNT(*) FROM customers WHERE LOWER(COALESCE(subscription_status, '')) = 'active'")->fetchColumn();
+        if (CustomerAccess::canViewAll($user)) return (int) $db->query('SELECT COUNT(*) FROM customers')->fetchColumn();
+        $query = $db->prepare('SELECT COUNT(*) FROM customers WHERE assigned_to = ?');
+        $query->execute([(int) $user['id']]);
+        return (int) $query->fetchColumn();
     }
 
-    private static function groupCounts(PDO $db, string $column): array
+    private static function countActiveForReport(PDO $db, array $user): int
     {
-        $query = $db->prepare('SELECT ' . $column . ' AS label, COUNT(*) AS total FROM customers GROUP BY ' . $column . ' ORDER BY total DESC, label LIMIT 50');
-        $query->execute();
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' AND assigned_to = ?';
+        $query = $db->prepare("SELECT COUNT(*) FROM customers WHERE LOWER(COALESCE(subscription_status, '')) = 'active'" . $scope);
+        $query->execute(CustomerAccess::canViewAll($user) ? [] : [(int) $user['id']]);
+        return (int) $query->fetchColumn();
+    }
+
+    private static function groupCounts(PDO $db, string $column, array $user): array
+    {
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' WHERE assigned_to = ?';
+        $query = $db->prepare('SELECT ' . $column . ' AS label, COUNT(*) AS total FROM customers' . $scope . ' GROUP BY ' . $column . ' ORDER BY total DESC, label LIMIT 50');
+        $query->execute(CustomerAccess::canViewAll($user) ? [] : [(int) $user['id']]);
         return $query->fetchAll();
     }
 
@@ -163,10 +236,110 @@ final class CustomerService
     private static function fetchCustomers(PDO $db, array $listQuery): array
     {
         $offset = ($listQuery['page'] - 1) * $listQuery['page_size'];
-        $sql = 'SELECT * FROM customers' . $listQuery['where'] . ' ORDER BY updated_at DESC, id DESC LIMIT ' . $listQuery['page_size'] . ' OFFSET ' . $offset;
+        $sql = 'SELECT customers.*, (SELECT ca.lead_source FROM customer_attribution ca WHERE ca.customer_id = customers.id) AS lead_source, (SELECT ca.campaign FROM customer_attribution ca WHERE ca.customer_id = customers.id) AS campaign FROM customers' . $listQuery['where'] . ' ORDER BY ' . $listQuery['sort'] . ' LIMIT ' . $listQuery['page_size'] . ' OFFSET ' . $offset;
         $customerQuery = $db->prepare($sql);
         $customerQuery->execute($listQuery['params']);
         return $customerQuery->fetchAll();
+    }
+
+    public static function bulkUpdate(PDO $db, array $requestFields, array $user): never
+    {
+        CustomerAccess::requireEdit($user);
+        $batch = self::validatedBulkBatch($db, $requestFields, $user);
+        $updated = self::persistBulkUpdates($db, $batch, $user);
+        Http::json(['updated' => $updated]);
+    }
+
+    private static function validatedBulkBatch(PDO $db, array $requestFields, array $user): array
+    {
+        return array_merge(
+            ['ids' => self::validatedBulkIds($requestFields['ids'] ?? null)],
+            self::validatedBulkFields($db, $requestFields, $user)
+        );
+    }
+
+    private static function validatedBulkIds(mixed $requestedIds): array
+    {
+        if (!is_array($requestedIds) || count($requestedIds) < 1 || count($requestedIds) > 100) {
+            Http::json(['error' => 'validation_error', 'fields' => ['ids' => 'حدد من 1 إلى 100 عميل.']], 422);
+        }
+        $ids = [];
+        foreach ($requestedIds as $requestedId) {
+            if ((!is_int($requestedId) && !(is_string($requestedId) && ctype_digit($requestedId))) || (int) $requestedId < 1) {
+                Http::json(['error' => 'validation_error', 'fields' => ['ids' => 'معرّفات العملاء غير صالحة.']], 422);
+            }
+            $ids[(int) $requestedId] = (int) $requestedId;
+        }
+        return array_values($ids);
+    }
+
+    private static function validatedBulkFields(PDO $db, array $requestFields, array $user): array
+    {
+        $hasStage = array_key_exists('crm_stage', $requestFields);
+        $hasAssignee = array_key_exists('assigned_to', $requestFields);
+        if (!$hasStage && !$hasAssignee) Http::json(['error' => 'validation_error', 'message' => 'اختر مرحلة أو مسؤولًا للتحديث.'], 422);
+        if ($hasAssignee && !CustomerAccess::canViewAll($user)) Http::json(['error' => 'forbidden'], 403);
+        return [
+            'stage' => $hasStage ? self::validatedStage($requestFields) : null,
+            'assignee' => $hasAssignee ? self::validatedAssignee($db, $requestFields) : null,
+            'has_stage' => $hasStage,
+            'has_assignee' => $hasAssignee,
+        ];
+    }
+
+    private static function accessibleCustomers(PDO $db, array $ids, array $user): array
+    {
+        $sql = 'SELECT id, assigned_to, crm_stage FROM customers WHERE id = ?';
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') $sql .= ' FOR UPDATE';
+        $find = $db->prepare($sql);
+        $customers = [];
+        foreach ($ids as $id) {
+            $find->execute([$id]);
+            $customer = $find->fetch();
+            if (!$customer || !self::canAccessCustomer($customer, $user)) {
+                $db->rollBack();
+                Http::json(['error' => 'not_found'], 404);
+            }
+            $customers[] = $customer;
+        }
+        return $customers;
+    }
+
+    private static function persistBulkUpdates(PDO $db, array $batch, array $user): int
+    {
+        $db->beginTransaction();
+        try {
+            $customers = self::accessibleCustomers($db, $batch['ids'], $user);
+            foreach ($customers as $customer) self::updateBulkCustomer($db, $customer, $batch, (int) $user['id']);
+            $db->commit();
+            return count($customers);
+        } catch (Throwable $exception) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $exception;
+        }
+    }
+
+    private static function updateBulkCustomer(PDO $db, array $customer, array $batch, int $actorId): void
+    {
+        $set = [];
+        $values = [];
+        $changedLabels = [];
+        if ($batch['has_stage'] && $batch['stage'] !== $customer['crm_stage']) {
+            $set[] = 'crm_stage = ?';
+            $values[] = $batch['stage'];
+            $changedLabels[] = 'مرحلة المتابعة';
+        }
+        if ($batch['has_assignee'] && (string) ($customer['assigned_to'] ?? '') !== (string) ($batch['assignee'] ?? '')) {
+            $set[] = 'assigned_to = ?';
+            $values[] = $batch['assignee'];
+            $changedLabels[] = 'المسؤول';
+        }
+        if (!$set) return;
+        $set[] = 'updated_at = ?';
+        $values[] = gmdate('Y-m-d H:i:s');
+        $values[] = (int) $customer['id'];
+        $db->prepare('UPDATE customers SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($values);
+        ActivityLog::record($db, (int) $customer['id'], $actorId, 'bulk_updated', 'تم تحديث الحقول: ' . implode('، ', $changedLabels) . '.');
     }
 
     public static function show(PDO $db, int $customerId, array $user): never
@@ -179,6 +352,7 @@ final class CustomerService
             'customer' => $customer,
             'notes' => self::customerNotes($db, $customerId),
             'tasks' => self::customerTasks($db, $customerId),
+            'tags' => self::customerTags($db, $customerId),
             'activity' => ActivityLog::forCustomer($db, $customerId),
         ]);
     }
@@ -194,9 +368,16 @@ final class CustomerService
 
     private static function findCustomer(PDO $db, int $customerId): ?array
     {
-        $customerQuery = $db->prepare('SELECT * FROM customers WHERE id = ?');
+        $customerQuery = $db->prepare('SELECT customers.*, ca.lead_source, ca.campaign FROM customers LEFT JOIN customer_attribution ca ON ca.customer_id = customers.id WHERE customers.id = ?');
         $customerQuery->execute([$customerId]);
         return $customerQuery->fetch() ?: null;
+    }
+
+    private static function customerTags(PDO $db, int $customerId): array
+    {
+        $query = $db->prepare('SELECT t.id, t.name FROM crm_tags t JOIN customer_tags ct ON ct.tag_id = t.id WHERE ct.customer_id = ? ORDER BY t.name');
+        $query->execute([$customerId]);
+        return $query->fetchAll();
     }
 
     private static function customerNotes(PDO $db, int $customerId): array
@@ -215,30 +396,123 @@ final class CustomerService
 
     public static function save(PDO $db, array $requestFields, array $user, ?int $customerId = null): never
     {
-        if ($user['role'] === 'member') {
-            if ($customerId !== null) {
-                $existing = self::findCustomer($db, $customerId);
-                if (!$existing || !self::canAccessCustomer($existing, $user)) Http::json(['error' => 'not_found'], 404);
-            }
-            $requestFields['assigned_to'] = (int) $user['id'];
+        CustomerAccess::requireEdit($user);
+        $existing = null;
+        if ($customerId !== null) {
+            $existing = self::findCustomer($db, $customerId);
+            if (!$existing || !self::canAccessCustomer($existing, $user)) Http::json(['error' => 'not_found'], 404);
+        }
+        if (!CustomerAccess::canViewAll($user)) {
+            $requestFields['assigned_to'] = $customerId === null ? (int) $user['id'] : ($existing['assigned_to'] ?? null);
         }
         $customerFields = self::validatedCustomerFields($db, $requestFields);
+        $hasTags = array_key_exists('tags', $requestFields);
+        $hasAttribution = array_key_exists('lead_source', $requestFields) || array_key_exists('campaign', $requestFields);
+        $tagNames = $hasTags ? self::validatedTags($requestFields['tags']) : [];
+        $leadSource = self::optionalText($requestFields, 'lead_source', 120);
+        $campaign = self::optionalText($requestFields, 'campaign', 120);
         try {
+            $db->beginTransaction();
             $savedId = self::persistCustomer($db, $customerFields, $customerId);
+            if ($hasAttribution) self::persistAttribution($db, $savedId, $leadSource, $campaign);
+            if ($hasTags) self::persistCustomerTags($db, $savedId, $tagNames, (int) $user['id']);
+            $db->commit();
         } catch (PDOException $exception) {
+            if ($db->inTransaction()) $db->rollBack();
             if (self::isUniqueConstraintViolation($exception)) {
                 Http::json(['error' => 'duplicate_email', 'fields' => ['email' => 'هذا البريد مسجل لعميل آخر.']], 409);
             }
             throw $exception;
+        } catch (Throwable $exception) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $exception;
         }
         $savedCustomer = self::findCustomer($db, $savedId);
-        ActivityLog::record($db, $savedId, (int) $user['id'], $customerId === null ? 'created' : 'updated', $customerId === null ? 'تمت إضافة العميل.' : 'تم تحديث بيانات العميل.');
+        $summary = $customerId === null ? 'تمت إضافة العميل.' : self::customerUpdateSummary($existing, [
+            'customer_fields' => $customerFields,
+            'has_attribution' => $hasAttribution,
+            'lead_source' => $leadSource,
+            'campaign' => $campaign,
+        ]);
+        ActivityLog::record($db, $savedId, (int) $user['id'], $customerId === null ? 'created' : 'updated', $summary);
         Http::json(['customer' => $savedCustomer], $customerId === null ? 201 : 200);
+    }
+
+    private static function customerUpdateSummary(array $existing, array $changes): string
+    {
+        $labels = [
+            'name' => 'الاسم', 'email' => 'البريد الإلكتروني', 'phone' => 'الهاتف',
+            'plan' => 'الباقة', 'subscription_status' => 'حالة الاشتراك', 'payment_status' => 'حالة الدفع',
+            'crm_stage' => 'مرحلة المتابعة', 'assigned_to' => 'المسؤول', 'lead_source' => 'مصدر العميل', 'campaign' => 'الحملة',
+        ];
+        $changed = [];
+        foreach ($changes['customer_fields'] as $field => $value) {
+            if (($existing[$field] ?? null) !== $value && (string) ($existing[$field] ?? '') !== (string) ($value ?? '')) $changed[$field] = true;
+        }
+        if ($changes['has_attribution']) {
+            if (($existing['lead_source'] ?? null) !== $changes['lead_source']) $changed['lead_source'] = true;
+            if (($existing['campaign'] ?? null) !== $changes['campaign']) $changed['campaign'] = true;
+        }
+        $changedLabels = array_map(fn($field) => $labels[$field] ?? $field, array_keys($changed));
+        return $changedLabels ? 'تم تحديث الحقول: ' . implode('، ', $changedLabels) . '.' : 'تم تحديث بيانات العميل.';
+    }
+
+    private static function validatedTags(mixed $input): array
+    {
+        if (!is_array($input) || count($input) > 20) {
+            Http::json(['error' => 'validation_error', 'fields' => ['tags' => 'أدخل حتى 20 وسمًا صالحًا.']], 422);
+        }
+        $tags = [];
+        foreach ($input as $value) {
+            if (!is_string($value)) Http::json(['error' => 'validation_error', 'fields' => ['tags' => 'الوسوم غير صالحة.']], 422);
+            $name = trim($value);
+            if ($name === '') continue;
+            if (mb_strlen($name) > 40) Http::json(['error' => 'validation_error', 'fields' => ['tags' => 'يجب ألا يتجاوز كل وسم 40 حرفًا.']], 422);
+            $normalized = mb_strtolower($name, 'UTF-8');
+            $tags[$normalized] = $name;
+        }
+        return array_values($tags);
+    }
+
+    private static function persistAttribution(PDO $db, int $customerId, ?string $leadSource, ?string $campaign): void
+    {
+        $db->prepare('DELETE FROM customer_attribution WHERE customer_id = ?')->execute([$customerId]);
+        if ($leadSource === null && $campaign === null) return;
+        $db->prepare('INSERT INTO customer_attribution (customer_id, lead_source, campaign) VALUES (?, ?, ?)')->execute([$customerId, $leadSource, $campaign]);
+    }
+
+    private static function persistCustomerTags(PDO $db, int $customerId, array $tagNames, int $actorId): void
+    {
+        $previousTags = self::customerTags($db, $customerId);
+        $db->prepare('DELETE FROM customer_tags WHERE customer_id = ?')->execute([$customerId]);
+        foreach ($tagNames as $name) {
+            $normalized = mb_strtolower($name, 'UTF-8');
+            $query = $db->prepare('SELECT id FROM crm_tags WHERE normalized_name = ?');
+            $query->execute([$normalized]);
+            $tagId = $query->fetchColumn();
+            if ($tagId === false) {
+                try {
+                    $db->prepare('INSERT INTO crm_tags (name, normalized_name) VALUES (?, ?)')->execute([$name, $normalized]);
+                    $tagId = $db->lastInsertId();
+                } catch (PDOException $exception) {
+                    if (!self::isUniqueConstraintViolation($exception)) throw $exception;
+                    $query->execute([$normalized]);
+                    $tagId = $query->fetchColumn();
+                    if ($tagId === false) throw $exception;
+                }
+            }
+            $db->prepare('INSERT INTO customer_tags (customer_id, tag_id) VALUES (?, ?)')->execute([$customerId, (int) $tagId]);
+        }
+        $previousNames = array_column($previousTags, 'name');
+        sort($previousNames);
+        $newNames = $tagNames;
+        sort($newNames);
+        if ($previousNames !== $newNames) ActivityLog::record($db, $customerId, $actorId, 'tags_updated', 'تم تحديث وسوم العميل.');
     }
 
     private static function canAccessCustomer(array $customer, array $user): bool
     {
-        return $user['role'] !== 'member' || (int) ($customer['assigned_to'] ?? 0) === (int) $user['id'];
+        return CustomerAccess::canAccess($customer, $user);
     }
 
     private static function validatedCustomerFields(PDO $db, array $requestFields): array
@@ -365,6 +639,7 @@ final class CustomerService
 
     public static function addNote(PDO $db, int $customerId, array $requestFields, array $user): never
     {
+        CustomerAccess::requireEdit($user);
         $customer = self::findCustomer($db, $customerId);
         if (!$customer || !self::canAccessCustomer($customer, $user)) {
             Http::json(['error' => 'not_found'], 404);

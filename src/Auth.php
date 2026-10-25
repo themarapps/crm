@@ -12,7 +12,10 @@ final class Auth
         if (!is_int($id) && !ctype_digit((string) $id)) {
             return null;
         }
-        $userQuery = $db->prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?');
+        $userQuery = $db->prepare("SELECT u.id, u.name, u.email, u.role, u.is_active,
+            CASE WHEN u.role = 'admin' THEN 1 ELSE COALESCE(p.view_all_customers, CASE WHEN u.role = 'manager' THEN 1 ELSE 0 END) END AS can_view_all_customers,
+            CASE WHEN u.role = 'admin' THEN 1 ELSE COALESCE(p.edit_customers, 1) END AS can_edit_customers
+            FROM users u LEFT JOIN user_customer_permissions p ON p.user_id = u.id WHERE u.id = ?");
         $userQuery->execute([(int) $id]);
         $user = $userQuery->fetch();
         if (!$user || (int) $user['is_active'] !== 1) {
@@ -97,7 +100,10 @@ final class Auth
 
     private static function findActiveUser(PDO $db, string $email): ?array
     {
-        $query = $db->prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND is_active = 1');
+        $query = $db->prepare("SELECT u.id, u.name, u.email, u.password_hash, u.role,
+            CASE WHEN u.role = 'admin' THEN 1 ELSE COALESCE(p.view_all_customers, CASE WHEN u.role = 'manager' THEN 1 ELSE 0 END) END AS can_view_all_customers,
+            CASE WHEN u.role = 'admin' THEN 1 ELSE COALESCE(p.edit_customers, 1) END AS can_edit_customers
+            FROM users u LEFT JOIN user_customer_permissions p ON p.user_id = u.id WHERE u.email = ? AND u.is_active = 1");
         $query->execute([$email]);
         $user = $query->fetch();
         return $user ?: null;

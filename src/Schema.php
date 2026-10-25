@@ -37,7 +37,10 @@ final class Schema
     private static function createTables(PDO $db, array $types): void
     {
         self::createUsersTable($db, $types);
+        self::createCustomerPermissionsTable($db, $types);
+        self::createAdminAuditTable($db, $types);
         self::createCustomersTable($db, $types);
+        self::createCustomerMetadataTables($db, $types);
         self::createNotesTable($db, $types);
         self::createActivityTable($db, $types);
         self::createIntegrationSettingsTable($db, $types);
@@ -52,6 +55,25 @@ final class Schema
             id {$id}, name {$text} NOT NULL, email {$text} NOT NULL UNIQUE,
             password_hash {$text} NOT NULL, role {$text} NOT NULL DEFAULT 'member',
             is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
+        ){$engine}");
+    }
+
+    private static function createCustomerPermissionsTable(PDO $db, array $types): void
+    {
+        $engine = $types['engine'];
+        $db->exec("CREATE TABLE IF NOT EXISTS user_customer_permissions (
+            user_id BIGINT NOT NULL PRIMARY KEY, view_all_customers INTEGER NULL,
+            edit_customers INTEGER NULL, updated_by BIGINT NULL, updated_at DATETIME NOT NULL
+        ){$engine}");
+    }
+
+    private static function createAdminAuditTable(PDO $db, array $types): void
+    {
+        $id = $types['id']; $text = $types['text']; $longText = $types['long_text']; $engine = $types['engine'];
+        $indexes = $types['indexes'] ? ', INDEX admin_audit_created_idx (created_at)' : '';
+        $db->exec("CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id {$id}, actor_id BIGINT NOT NULL, target_user_id BIGINT NULL,
+            action {$text} NOT NULL, summary {$longText} NOT NULL, created_at DATETIME NOT NULL{$indexes}
         ){$engine}");
     }
 
@@ -78,6 +100,21 @@ final class Schema
         $db->exec("CREATE TABLE IF NOT EXISTS crm_notes (
             id {$id}, customer_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
             body {$longText} NOT NULL, created_at DATETIME NOT NULL{$indexes}
+        ){$engine}");
+    }
+
+    private static function createCustomerMetadataTables(PDO $db, array $types): void
+    {
+        $id = $types['id']; $text = $types['text']; $engine = $types['engine'];
+        $attributionIndexes = $types['indexes'] ? ', INDEX customer_attribution_source_idx (lead_source), INDEX customer_attribution_campaign_idx (campaign)' : '';
+        $db->exec("CREATE TABLE IF NOT EXISTS customer_attribution (
+            customer_id BIGINT NOT NULL PRIMARY KEY, lead_source {$text} NULL, campaign {$text} NULL{$attributionIndexes}
+        ){$engine}");
+        $db->exec("CREATE TABLE IF NOT EXISTS crm_tags (
+            id {$id}, name {$text} NOT NULL, normalized_name {$text} NOT NULL UNIQUE
+        ){$engine}");
+        $db->exec("CREATE TABLE IF NOT EXISTS customer_tags (
+            customer_id BIGINT NOT NULL, tag_id BIGINT NOT NULL, PRIMARY KEY (customer_id, tag_id)
         ){$engine}");
     }
 
@@ -126,6 +163,10 @@ final class Schema
     {
         $db->exec('CREATE INDEX IF NOT EXISTS customers_stage_idx ON customers (crm_stage)');
         $db->exec('CREATE INDEX IF NOT EXISTS customers_subscription_idx ON customers (subscription_status)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customer_attribution_source_idx ON customer_attribution (lead_source)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customer_attribution_campaign_idx ON customer_attribution (campaign)');
+        $db->exec('CREATE INDEX IF NOT EXISTS customer_tags_tag_idx ON customer_tags (tag_id)');
+        $db->exec('CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit_log (created_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS crm_notes_customer_idx ON crm_notes (customer_id)');
         $db->exec('CREATE INDEX IF NOT EXISTS customer_activity_idx ON customer_activity (customer_id, created_at)');
         $db->exec('CREATE INDEX IF NOT EXISTS follow_up_customer_idx ON follow_up_tasks (customer_id)');

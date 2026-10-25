@@ -4,9 +4,11 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/src/Schema.php';
 require_once dirname(__DIR__) . '/src/Database.php';
 require_once dirname(__DIR__) . '/src/Http.php';
+require_once dirname(__DIR__) . '/src/CustomerAccess.php';
 require_once dirname(__DIR__) . '/src/Auth.php';
 require_once dirname(__DIR__) . '/src/CustomerService.php';
 require_once dirname(__DIR__) . '/src/ActivityLog.php';
+require_once dirname(__DIR__) . '/src/LeadIntakeService.php';
 require_once dirname(__DIR__) . '/src/CsvImporter.php';
 require_once dirname(__DIR__) . '/src/TaskService.php';
 require_once dirname(__DIR__) . '/src/TeamService.php';
@@ -66,6 +68,10 @@ try {
         Http::json(['ok' => true]);
     }
 
+    if ($path === '/api/leads/inbound' && $method === 'POST') {
+        LeadIntakeService::receive($db);
+    }
+
     $user = Auth::requireUser($db);
     if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
         Http::requireCsrf();
@@ -103,12 +109,17 @@ try {
     if ($path === '/api/customers' && $method === 'POST') {
         CustomerService::save($db, Http::body(), $user);
     }
+    if ($path === '/api/customers/bulk' && $method === 'POST') {
+        CustomerService::bulkUpdate($db, Http::body(), $user);
+    }
     if ($path === '/api/import/csv/preview' && $method === 'POST') {
         Auth::requireManager($user);
+        CustomerAccess::requireImport($user);
         CsvImporter::preview($db, $_FILES['file'] ?? []);
     }
     if ($path === '/api/import/csv' && $method === 'POST') {
         Auth::requireManager($user);
+        CustomerAccess::requireImport($user);
         CsvImporter::import($db, $_FILES['file'] ?? [], (int) $user['id']);
     }
     if (preg_match('#^/api/customers/(\d+)$#', $path, $matches)) {
@@ -140,6 +151,9 @@ try {
     }
     if ($path === '/api/team' && $method === 'GET') {
         TeamService::list($db, $user);
+    }
+    if ($path === '/api/audit' && $method === 'GET') {
+        TeamService::audit($db, $user);
     }
     if ($path === '/api/team' && $method === 'POST') {
         Auth::requireAdmin($user);

@@ -9,12 +9,13 @@ final class DashboardService
             'counts' => self::counts($db, $user),
             'upcoming_tasks' => self::tasks($db, $user, false),
             'overdue_tasks' => self::tasks($db, $user, true),
+            'inactive_customers' => self::inactiveCustomers($db, $user),
         ]);
     }
 
     private static function counts(PDO $db, array $user): array
     {
-        $member = $user['role'] === 'member';
+        $member = !CustomerAccess::canViewAll($user);
         $customerWhere = $member ? ' WHERE assigned_to = ?' : '';
         $customerParams = $member ? [(int) $user['id']] : [];
         $customersQuery = $db->prepare('SELECT COUNT(*) FROM customers' . $customerWhere);
@@ -37,8 +38,11 @@ final class DashboardService
 
     private static function taskScope(array $user, string $alias = ''): array
     {
-        if ($user['role'] !== 'member') return ['', []];
+        if (CustomerAccess::canViewAll($user)) return ['', []];
         $prefix = $alias === '' ? '' : $alias . '.';
+        if ($user['role'] !== 'member') {
+            return [' AND ' . $prefix . 'customer_id IN (SELECT id FROM customers WHERE assigned_to = ?)', [(int) $user['id']]];
+        }
         return [' AND (' . $prefix . 'assignee_id = ? OR ' . $prefix . 'customer_id IN (SELECT id FROM customers WHERE assigned_to = ?))', [(int) $user['id'], (int) $user['id']]];
     }
 
@@ -67,5 +71,15 @@ final class DashboardService
         $taskQuery = $db->prepare("SELECT t.id, t.customer_id, t.title, t.due_at, t.status, c.name AS customer_name, u.name AS assignee_name FROM follow_up_tasks t JOIN customers c ON c.id = t.customer_id LEFT JOIN users u ON u.id = t.assignee_id WHERE t.status = 'open'" . $due . $scope . ' ORDER BY t.due_at ASC LIMIT 8');
         $taskQuery->execute($params);
         return $taskQuery->fetchAll();
+    }
+
+    private static function inactiveCustomers(PDO $db, array $user): array
+    {
+        $scope = CustomerAccess::canViewAll($user) ? '' : ' AND c.assigned_to = ?';
+        $params = [gmdate('Y-m-d H:i:s', time() - 14 * 86400)];
+        if (!CustomerAccess::canViewAll($user)) $params[] = (int) $user['id'];
+        $query = $db->prepare("SELECT c.id, c.name, c.crm_stage, c.assigned_to, COALESCE(c.last_activity_at, c.registered_at, c.created_at) AS last_contact_at FROM customers c WHERE COALESCE(c.last_activity_at, c.registered_at, c.created_at) < ?" . $scope . ' ORDER BY last_contact_at ASC LIMIT 8');
+        $query->execute($params);
+        return $query->fetchAll();
     }
 }
