@@ -530,6 +530,24 @@ tbody tr:hover {
   font-size:13px;
   overflow-wrap:anywhere
 }
+.detail-stage-control {
+  display:flex;
+  align-items:center;
+  gap:7px
+}
+.detail-stage-control select {
+  min-width:0;
+  padding:7px 9px;
+  font-size:12px
+}
+.customer-stage-feedback:empty {
+  display:none
+}
+.customer-stage-feedback.error {
+  display:block;
+  color:var(--red);
+  margin-top:4px
+}
 .tag-list {
   display:flex;
   flex-wrap:wrap;

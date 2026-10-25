@@ -5,6 +5,7 @@ const labels = {
   active: 'نشط', trial: 'تجريبي', expired: 'منتهي', canceled: 'ملغي', past_due: 'متأخر',
   open: 'مفتوحة', done: 'مكتملة', admin: 'مسؤول', manager: 'مدير', member: 'عضو فريق',
 };
+const customerStages = ['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'];
 const routes = [
   ['dashboard', '/', 'الرئيسية', 'home'], ['customers', '/customers', 'العملاء', 'customers'],
   ['tasks', '/tasks', 'المهام', 'tasks'], ['reports', '/reports', 'التقارير', 'reports'],
@@ -329,7 +330,7 @@ function bulkToolbarMarkup(members) {
   if (!canEditCustomers()) return '';
   const memberOptions = members.filter((member) => member.is_active).map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
   const assignmentField = canViewAllCustomers() ? `<div class="field"><label for="bulk-assignee">المسؤول الجديد</label><select id="bulk-assignee"><option value="">بدون تغيير</option><option value="none">غير معين</option>${memberOptions}</select></div>` : '';
-  const stageOptions = ['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'].map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
+  const stageOptions = customerStages.map((stage) => `<option value="${stage}">${labels[stage]}</option>`).join('');
   return `<div class="toolbar bulk-toolbar"><label><input id="select-visible-customers" type="checkbox"> تحديد الصفحة</label><span>${state.selectedCustomers.size} محدد</span><div class="field"><label for="bulk-stage">المرحلة الجديدة</label><select id="bulk-stage"><option value="">بدون تغيير</option>${stageOptions}</select></div>${assignmentField}<button class="btn primary" type="button" data-action="bulk-update" ${state.selectedCustomers.size ? '' : 'disabled'}>تطبيق على المحدد</button></div>`;
 }
 
@@ -391,9 +392,10 @@ async function renderCustomer(customerId) {
   const tasks = response.tasks.length ? response.tasks.map(taskCard).join('') : '<div class="empty">لا توجد مهام للعميل.</div>';
   const activity = response.activity.length ? response.activity.map((entry) => `<div class="task-row"><div><strong>${escapeHtml(entry.summary)}</strong><small>${escapeHtml(entry.actor_name || 'النظام')} · ${dateLabel(entry.created_at)}</small></div></div>`).join('') : '<div class="empty">سيظهر هنا سجل تحديثات العميل ومتابعاته.</div>';
   app.innerHTML = shell(`${pageHead('ملف العميل', `تمت الإضافة ${dateLabel(customer.registered_at)}`, canEditCustomers() ? '<button class="btn" data-action="edit-customer">تعديل البيانات</button>' : '')}
-    <section class="panel"><div class="detail-hero"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><h2>${escapeHtml(customer.name)}</h2><p>${escapeHtml(customer.email)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p></div></div>${badge(customer.subscription_status)}</div><div class="panel-body detail-grid">${detailField('الباقة', customer.plan)}${detailField('دورة الفوترة', customer.billing_cycle)}${detailField('حالة الدفع', customer.payment_status)}${detailField('مرحلة المتابعة', labels[customer.crm_stage] || customer.crm_stage)}${detailField('المسؤول', state.team.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}${detailField('مصدر العميل', customer.lead_source)}${detailField('الحملة', customer.campaign)}${detailField('الشركة', customer.company_url)}${detailField('الخدمات', customer.services)}${detailField('تاريخ التسجيل', dateLabel(customer.registered_at))}<div class="detail-field"><small>وسوم العميل</small><div class="tag-list">${(response.tags || []).length ? response.tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div></div></section>
+    <section class="panel"><div class="detail-hero"><div class="person"><span class="avatar">${escapeHtml((customer.name || 'ع').slice(0, 1))}</span><div><h2>${escapeHtml(customer.name)}</h2><p>${escapeHtml(customer.email)}${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p></div></div>${badge(customer.subscription_status)}</div><div class="panel-body detail-grid">${detailField('الباقة', customer.plan)}${detailField('دورة الفوترة', customer.billing_cycle)}${detailField('حالة الدفع', customer.payment_status)}${customerStageField(customer)}${detailField('المسؤول', state.team.find((member) => Number(member.id) === Number(customer.assigned_to))?.name || 'غير معين')}${detailField('مصدر العميل', customer.lead_source)}${detailField('الحملة', customer.campaign)}${detailField('الشركة', customer.company_url)}${detailField('الخدمات', customer.services)}${detailField('تاريخ التسجيل', dateLabel(customer.registered_at))}<div class="detail-field"><small>وسوم العميل</small><div class="tag-list">${(response.tags || []).length ? response.tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div></div></section>
     <div class="content-grid"><div><section class="panel"><div class="panel-head"><h2>الملاحظات</h2></div><div class="panel-body">${canEditCustomers() ? `<form id="note-form"><div class="field"><label for="note-body">ملاحظة جديدة</label><textarea id="note-body" name="body" required maxlength="10000" placeholder="اكتب ملخص المكالمة أو أي معلومة مهمة"></textarea></div><button class="btn primary" style="margin-top:10px" type="submit">حفظ الملاحظة</button><div data-error></div></form>` : ''}${notes}</div></section></div><div><section class="panel"><div class="panel-head"><h2>المهام</h2>${canEditCustomers() ? '<button class="btn small" data-action="new-task">+ مهمة</button>' : ''}</div><div class="panel-body">${tasks}</div></section></div></div><section class="panel activity-panel"><div class="panel-head"><h2>سجل نشاط العميل</h2></div><div class="panel-body">${activity}</div></section>`, 'customers', 'ملف العميل');
   bindShell();
+  bindCustomerStage(customerId, customer.crm_stage);
   document.querySelector('#note-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     try { await request(`/api/customers/${customerId}/notes`, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) }); await renderCustomer(customerId); }
@@ -403,6 +405,43 @@ async function renderCustomer(customerId) {
 
 function detailField(title, fieldContent) {
   return `<div class="detail-field"><small>${title}</small><strong>${escapeHtml(fieldContent || '—')}</strong></div>`;
+}
+
+function customerStageField(customer) {
+  if (!canEditCustomers()) return detailField('حالة العميل', labels[customer.crm_stage] || customer.crm_stage);
+  const options = selectOptions(customerStages.map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new');
+  return `<div class="detail-field"><small>حالة العميل</small><div class="detail-stage-control"><select id="customer-stage" aria-label="حالة العميل">${options}</select><button class="btn small" id="save-customer-stage" type="button" disabled>حفظ</button></div><span class="muted customer-stage-feedback" id="customer-stage-feedback" aria-live="polite"></span></div>`;
+}
+
+function bindCustomerStage(customerId, currentStage) {
+  const select = document.querySelector('#customer-stage');
+  const save = document.querySelector('#save-customer-stage');
+  const feedback = document.querySelector('#customer-stage-feedback');
+  select?.addEventListener('change', () => {
+    save.disabled = select.value === currentStage;
+    feedback.textContent = '';
+    feedback.className = 'muted customer-stage-feedback';
+  });
+  save?.addEventListener('click', () => saveCustomerStage(customerId, currentStage));
+}
+
+async function saveCustomerStage(customerId, currentStage) {
+  const select = document.querySelector('#customer-stage');
+  const save = document.querySelector('#save-customer-stage');
+  const feedback = document.querySelector('#customer-stage-feedback');
+  save.disabled = true;
+  select.disabled = true;
+  try {
+    await request('/api/customers/bulk', { method: 'POST', body: JSON.stringify({ ids: [Number(customerId)], crm_stage: select.value }) });
+  } catch (error) {
+    select.disabled = false;
+    save.disabled = select.value === currentStage;
+    feedback.textContent = error.message;
+    feedback.className = 'error customer-stage-feedback';
+    return;
+  }
+  await renderCustomer(customerId);
+  document.querySelector('#customer-stage-feedback').textContent = 'تم تحديث حالة العميل.';
 }
 
 function taskCard(task) {
@@ -703,7 +742,7 @@ function selectOptions(options, selected, getOptionLabel = (option) => option.na
 function customerFields(customer = {}, tagOptions = []) {
   const field = (name, label, type = 'text') => `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${escapeHtml(customer[name] ?? '')}" ${name === 'name' || name === 'email' ? 'required' : ''}></div>`;
   return `<div class="form-grid">${field('name', 'اسم العميل')}${field('email', 'البريد الإلكتروني', 'email')}${field('phone', 'رقم الهاتف', 'tel')}${field('company_url', 'رابط الشركة', 'url')}${field('plan', 'الباقة')}${field('subscription_status', 'حالة الاشتراك')}${field('billing_cycle', 'دورة الفوترة')}${field('payment_status', 'حالة الدفع')}
-    <div class="field"><label for="f-crm_stage">مرحلة المتابعة</label><select id="f-crm_stage" name="crm_stage">${selectOptions(['new', 'contacted', 'appointment_scheduled', 'interested', 'not_interested'].map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new')}</select></div>
+    <div class="field"><label for="f-crm_stage">مرحلة المتابعة</label><select id="f-crm_stage" name="crm_stage">${selectOptions(customerStages.map((id) => ({ id, name: labels[id] })), customer.crm_stage || 'new')}</select></div>
     <div class="field"><label for="f-assigned_to">المسؤول</label><select id="f-assigned_to" name="assigned_to"><option value="">غير معين</option>${selectOptions(state.team.filter((member) => member.is_active), customer.assigned_to)}</select></div>${field('lead_source', 'مصدر العميل')}${field('campaign', 'الحملة')}${field('registered_at', 'تاريخ التسجيل', 'date')}${field('last_amount', 'آخر مبلغ', 'number')}<div class="field full"><label for="f-tags_text">الوسوم</label><input id="f-tags_text" name="tags_text" list="tag-suggestions" value="${escapeHtml((customer.tags || []).map((tag) => tag.name).join(', '))}" placeholder="مثال: أولوية عالية، حملة الصيف"><datalist id="tag-suggestions">${tagOptions.map((tag) => `<option value="${escapeHtml(tag.name)}"></option>`).join('')}</datalist><small class="muted">افصل بين الوسوم بفاصلة. حتى 20 وسمًا، بحد أقصى 40 حرفًا لكل وسم.</small></div></div><div data-error></div><div class="form-actions"><button class="btn primary" type="submit">حفظ العميل</button><button class="btn" type="button" data-cancel>إلغاء</button></div>`;
 }
 
