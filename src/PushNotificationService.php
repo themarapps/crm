@@ -101,7 +101,7 @@ final class PushNotificationService
     private static function newCustomerGroups(PDO $db): array
     {
         $now = time();
-        $query = $db->prepare("SELECT c.id AS customer_id, s.id AS subscription_id, s.endpoint_hash, s.endpoint, s.p256dh, s.auth_token FROM customers c JOIN users u ON u.is_active = 1 JOIN web_push_subscriptions s ON s.user_id = u.id LEFT JOIN customer_push_deliveries d ON d.customer_id = c.id AND d.subscription_id = s.id WHERE c.created_at > ? AND c.created_at <= ? AND d.id IS NULL AND (u.role = 'admin' OR c.assigned_to = u.id) ORDER BY c.created_at ASC, c.id ASC LIMIT " . self::MAX_BATCH_SIZE);
+        $query = $db->prepare("SELECT c.id AS customer_id, s.id AS subscription_id, s.endpoint_hash, s.endpoint, s.p256dh, s.auth_token FROM customers c JOIN users u ON u.is_active = 1 JOIN web_push_subscriptions s ON s.user_id = u.id LEFT JOIN customer_push_deliveries d ON d.customer_id = c.id AND d.subscription_id = s.id WHERE c.created_at > ? AND c.created_at <= ? AND d.id IS NULL ORDER BY c.created_at ASC, c.id ASC LIMIT " . self::MAX_BATCH_SIZE);
         $query->execute([gmdate('Y-m-d H:i:s', $now - self::DUE_WINDOW_SECONDS), gmdate('Y-m-d H:i:s', $now)]);
         $groups = [];
         foreach ($query->fetchAll() as $row) {
